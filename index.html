@@ -312,8 +312,10 @@
           <form id="tx-form" onsubmit="submitTx(event)">
             <div class="form-grid">
               <div class="field full">
-                <label>สินค้า</label>
-                <select id="tx-product" required onchange="updateTxPreview()"></select>
+                <label>รหัสสินค้า</label>
+                <input type="text" id="tx-product-code" list="tx-product-datalist" placeholder="พิมพ์รหัสสินค้า เช่น P0001" required autocomplete="off" oninput="updateTxPreview()">
+                <datalist id="tx-product-datalist"></datalist>
+                <div class="stock-preview" id="tx-product-info" style="margin-top:8px;">พิมพ์รหัสสินค้าเพื่อดูชื่อสินค้า</div>
               </div>
               <div class="field">
                 <label id="tx-qty-label">จำนวนที่รับเข้า</label>
@@ -675,10 +677,17 @@ function loadProductsForForm(){
   apiGet('getProducts')
     .then(list => {
       PRODUCTS = list;
-      const sel = document.getElementById('tx-product');
-      sel.innerHTML = '<option value="">-- เลือกสินค้า --</option>' + list.map(p => `<option value="${p.id}">${escapeHtml(p.name)} (${p.id})</option>`).join('');
+      const dl = document.getElementById('tx-product-datalist');
+      dl.innerHTML = list.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+      updateTxPreview();
     })
     .catch(showError);
+}
+
+function findTxProduct(){
+  const code = (document.getElementById('tx-product-code').value || '').trim();
+  if(!code) return null;
+  return PRODUCTS.find(p => p.id.toLowerCase() === code.toLowerCase()) || null;
 }
 
 function setTxType(type){
@@ -690,11 +699,21 @@ function setTxType(type){
 }
 
 function updateTxPreview(){
-  const pid = document.getElementById('tx-product').value;
   const qty = Number(document.getElementById('tx-qty').value) || 0;
   const preview = document.getElementById('tx-preview');
-  const product = PRODUCTS.find(p => p.id === pid);
-  if(!product){ preview.textContent = 'เลือกสินค้าเพื่อดูยอดคงเหลือ'; return; }
+  const infoEl = document.getElementById('tx-product-info');
+  const code = (document.getElementById('tx-product-code').value || '').trim();
+  const product = findTxProduct();
+
+  if(!product){
+    infoEl.textContent = code ? `ไม่พบสินค้ารหัส "${code}"` : 'พิมพ์รหัสสินค้าเพื่อดูชื่อสินค้า';
+    infoEl.style.color = code ? 'var(--warn)' : '';
+    preview.textContent = 'เลือกสินค้าเพื่อดูยอดคงเหลือ';
+    return;
+  }
+
+  infoEl.style.color = '';
+  infoEl.innerHTML = `<strong>${escapeHtml(product.name)}</strong>${product.category ? ' · ' + escapeHtml(product.category) : ''} · คงเหลือ ${product.qty} ${escapeHtml(product.unit||'')}`;
 
   const current = Number(product.qty);
   let next = current;
@@ -708,12 +727,12 @@ function updateTxPreview(){
 function submitTx(e){
   e.preventDefault();
   const btn = document.getElementById('tx-submit-btn');
-  const pid = document.getElementById('tx-product').value;
-  if(!pid){ showError('กรุณาเลือกสินค้า'); return; }
+  const product = findTxProduct();
+  if(!product){ showError('ไม่พบสินค้าตามรหัสที่พิมพ์ กรุณาตรวจสอบรหัสอีกครั้ง'); return; }
 
   btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
   const payload = {
-    productId: pid,
+    productId: product.id,
     type: currentTxType,
     qty: document.getElementById('tx-qty').value,
     user: document.getElementById('tx-user').value.trim(),
@@ -725,6 +744,8 @@ function submitTx(e){
       btn.disabled = false; btn.textContent = 'บันทึกรายการ';
       toast(`บันทึกสำเร็จ · ยอดใหม่ ${res.newQty}`, 'success');
       document.getElementById('tx-form').reset();
+      document.getElementById('tx-product-info').textContent = 'พิมพ์รหัสสินค้าเพื่อดูชื่อสินค้า';
+      document.getElementById('tx-product-info').style.color = '';
       document.getElementById('tx-preview').textContent = 'เลือกสินค้าเพื่อดูยอดคงเหลือ';
       loadProductsForForm();
       if(isDashboardLoaded) loadDashboard();
