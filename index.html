@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ระบบเช็คสต็อก</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#16232E;
+    --ink-soft:#3D4C57;
+    --muted:#7A8792;
+    --bg:#F5F6F8;
+    --surface:#FFFFFF;
+    --line:#E4E7EB;
+    --brand:#2F6F4E;
+    --brand-dark:#215038;
+    --brand-soft:#E6F1EC;
+    --warn:#C1440E;
+    --warn-soft:#FBEAE2;
+    --amber:#B8860B;
+    --amber-soft:#FBF3DF;
+    --radius:10px;
+    --mono:'IBM Plex Mono', ui-monospace, monospace;
+    --sans:'IBM Plex Sans Thai','IBM Plex Sans',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;}
+  button{font-family:inherit;}
+  .app{display:flex;min-height:100vh;}
+
+  /* ---------- Sidebar (desktop) / bottom nav (mobile) ---------- */
+  .sidebar{
+    width:220px;flex-shrink:0;background:var(--ink);color:#fff;
+    display:flex;flex-direction:column;padding:22px 14px;
+  }
+  .brand{display:flex;align-items:center;gap:10px;padding:0 8px 22px 8px;}
+  .brand-mark{
+    width:34px;height:34px;border-radius:8px;background:var(--brand);
+    display:flex;align-items:center;justify-content:center;font-family:var(--mono);
+    font-weight:700;color:#fff;font-size:15px;flex-shrink:0;
+  }
+  .brand-text{font-weight:600;font-size:15px;line-height:1.2;}
+  .brand-text small{display:block;font-weight:400;font-size:11px;color:#9AA7B0;font-family:var(--mono);letter-spacing:.04em;}
+  .nav-item{
+    display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:8px;
+    color:#C6CDD3;cursor:pointer;font-size:14px;font-weight:500;margin-bottom:2px;
+    transition:background .15s ease, color .15s ease;
+  }
+  .nav-item svg{width:18px;height:18px;flex-shrink:0;opacity:.85;}
+  .nav-item.active{background:rgba(255,255,255,.08);color:#fff;}
+  .nav-item:hover{background:rgba(255,255,255,.06);color:#fff;}
+  .nav-badge{
+    margin-left:auto;background:var(--warn);color:#fff;font-size:10px;font-weight:700;
+    padding:1px 6px;border-radius:20px;font-family:var(--mono);
+  }
+  .sidebar-foot{margin-top:auto;font-size:11px;color:#6E7A83;padding:8px;font-family:var(--mono);}
+
+  main{flex:1;min-width:0;padding:26px 32px 90px 32px;}
+  .topbar{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:8px;}
+  .topbar h1{font-size:21px;margin:0;font-weight:700;}
+  .topbar .sub{color:var(--muted);font-size:13px;margin-top:2px;}
+  .refresh-btn{
+    border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);
+    padding:8px 14px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;
+    display:flex;align-items:center;gap:6px;
+  }
+  .refresh-btn:hover{border-color:var(--brand);color:var(--brand-dark);}
+  .refresh-btn svg{width:14px;height:14px;}
+  .refresh-btn.spinning svg{animation:spin .7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .view{display:none;}
+  .view.active{display:block;}
+
+  /* ---------- cards / grid ---------- */
+  .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}
+  .stat-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;}
+  .stat-card .label{font-size:12px;color:var(--muted);font-weight:500;}
+  .stat-card .value{font-family:var(--mono);font-size:26px;font-weight:700;margin-top:6px;color:var(--ink);}
+  .stat-card.alert .value{color:var(--warn);}
+  .stat-card.brand-accent{border-color:var(--brand);}
+
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin-bottom:20px;}
+  .panel-head{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;}
+  .panel-head h2{font-size:15px;margin:0;font-weight:600;}
+  .panel-body{padding:8px 0;}
+  .panel-body.pad{padding:16px 18px;}
+
+  .low-row{display:flex;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid var(--line);}
+  .low-row:last-child{border-bottom:none;}
+  .low-dot{width:8px;height:8px;border-radius:50%;background:var(--warn);flex-shrink:0;}
+  .low-row .name{flex:1;font-size:13.5px;font-weight:500;}
+  .low-row .qty{font-family:var(--mono);font-size:13px;color:var(--warn);font-weight:600;}
+  .empty-note{padding:22px 18px;color:var(--muted);font-size:13px;text-align:center;}
+
+  .tx-row{display:flex;align-items:center;gap:10px;padding:10px 18px;border-bottom:1px solid var(--line);font-size:13px;}
+  .tx-row:last-child{border-bottom:none;}
+  .tx-tag{font-family:var(--mono);font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px;flex-shrink:0;}
+  .tx-tag.in{background:var(--brand-soft);color:var(--brand-dark);}
+  .tx-tag.out{background:var(--warn-soft);color:var(--warn);}
+  .tx-tag.adj{background:var(--amber-soft);color:var(--amber);}
+  .tx-row .name{flex:1;color:var(--ink-soft);}
+  .tx-row .time{color:var(--muted);font-family:var(--mono);font-size:11px;}
+
+  /* ---------- table ---------- */
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  thead th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);
+    padding:10px 18px;border-bottom:1px solid var(--line);font-weight:600;}
+  tbody td{padding:11px 18px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:#FAFBFC;}
+  td.mono, th.mono{font-family:var(--mono);}
+  .pid{font-family:var(--mono);font-size:12px;color:var(--muted);}
+  .gauge{width:70px;height:6px;background:var(--line);border-radius:4px;overflow:hidden;display:inline-block;vertical-align:middle;margin-right:8px;}
+  .gauge > div{height:100%;background:var(--brand);}
+  .gauge.low > div{background:var(--warn);}
+  .qty-cell{display:flex;align-items:center;}
+  .badge-low{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--warn);background:var(--warn-soft);padding:2px 6px;border-radius:5px;margin-left:8px;}
+  .row-actions{display:flex;gap:6px;}
+  .icon-btn{
+    border:1px solid var(--line);background:var(--surface);width:30px;height:30px;border-radius:7px;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink-soft);
+  }
+  .icon-btn:hover{border-color:var(--brand);color:var(--brand-dark);}
+  .icon-btn svg{width:14px;height:14px;}
+  .icon-btn.danger:hover{border-color:var(--warn);color:var(--warn);}
+
+  .toolbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;}
+  .search-input{
+    flex:1;min-width:180px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;
+    font-size:13.5px;font-family:inherit;background:var(--surface);
+  }
+  .search-input:focus{outline:none;border-color:var(--brand);}
+  select, input[type=text], input[type=number], input[type=date], textarea{
+    font-family:inherit;font-size:13.5px;padding:9px 11px;border:1px solid var(--line);
+    border-radius:8px;background:var(--surface);color:var(--ink);width:100%;
+  }
+  select:focus, input:focus, textarea:focus{outline:none;border-color:var(--brand);}
+
+  .btn{
+    border:none;background:var(--brand);color:#fff;padding:9px 16px;border-radius:8px;
+    font-size:13.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+  }
+  .btn:hover{background:var(--brand-dark);}
+  .btn.secondary{background:var(--surface);color:var(--ink-soft);border:1px solid var(--line);}
+  .btn.secondary:hover{border-color:var(--ink-soft);}
+  .btn.danger{background:var(--warn);}
+  .btn.danger:hover{background:#9E370B;}
+  .btn svg{width:14px;height:14px;}
+  .btn:disabled{opacity:.55;cursor:not-allowed;}
+
+  /* ---------- transaction quick form ---------- */
+  .tx-type-toggle{display:flex;gap:8px;margin-bottom:16px;}
+  .tx-type-btn{
+    flex:1;padding:12px;border:1.5px solid var(--line);border-radius:9px;background:var(--surface);
+    cursor:pointer;text-align:center;font-weight:600;font-size:13.5px;color:var(--muted);
+  }
+  .tx-type-btn.sel-in.active{border-color:var(--brand);color:var(--brand-dark);background:var(--brand-soft);}
+  .tx-type-btn.sel-out.active{border-color:var(--warn);color:var(--warn);background:var(--warn-soft);}
+  .tx-type-btn.sel-adj.active{border-color:var(--amber);color:var(--amber);background:var(--amber-soft);}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .form-grid .full{grid-column:1 / -1;}
+  .field label{display:block;font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;}
+  .stock-preview{
+    font-family:var(--mono);font-size:12.5px;color:var(--muted);margin-top:6px;
+    background:var(--bg);padding:8px 10px;border-radius:7px;
+  }
+
+  /* ---------- filters ---------- */
+  .filter-bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+  .filter-bar > *{min-width:140px;}
+
+  /* ---------- modal ---------- */
+  .overlay{
+    position:fixed;inset:0;background:rgba(22,35,46,.45);display:none;align-items:center;justify-content:center;
+    z-index:100;padding:16px;
+  }
+  .overlay.show{display:flex;}
+  .modal{background:var(--surface);border-radius:14px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;}
+  .modal-head{padding:18px 20px 4px 20px;display:flex;justify-content:space-between;align-items:center;}
+  .modal-head h3{margin:0;font-size:16px;}
+  .modal-close{background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer;line-height:1;}
+  .modal-body{padding:14px 20px 20px 20px;}
+  .field{margin-bottom:14px;}
+  .modal-actions{display:flex;gap:10px;margin-top:6px;}
+  .modal-actions .btn{flex:1;justify-content:center;}
+
+  /* ---------- toast ---------- */
+  .toast-wrap{position:fixed;bottom:18px;right:18px;z-index:200;display:flex;flex-direction:column;gap:8px;}
+  .toast{
+    background:var(--ink);color:#fff;padding:11px 16px;border-radius:9px;font-size:13px;
+    box-shadow:0 8px 24px rgba(0,0,0,.18);display:flex;align-items:center;gap:8px;min-width:220px;
+    animation:slideIn .2s ease;
+  }
+  .toast.error{background:var(--warn);}
+  .toast.success{background:var(--brand-dark);}
+  @keyframes slideIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+  .skeleton{background:linear-gradient(90deg,#EEF0F2 25%,#F6F7F8 37%,#EEF0F2 63%);background-size:400% 100%;
+    animation:shimmer 1.3s infinite;border-radius:6px;}
+  @keyframes shimmer{0%{background-position:100% 0;}100%{background-position:0 0;}}
+
+  /* ---------- mobile ---------- */
+  .bottom-nav{display:none;}
+  @media (max-width:860px){
+    .sidebar{display:none;}
+    main{padding:16px 14px 84px 14px;}
+    .stat-grid{grid-template-columns:1fr 1fr;}
+    .form-grid{grid-template-columns:1fr;}
+    table thead{display:none;}
+    table, tbody, tr, td{display:block;width:100%;}
+    tbody tr{border-bottom:1px solid var(--line);padding:10px 4px;}
+    tbody td{border:none;padding:3px 4px;}
+    tbody td.mono-label::before{content:attr(data-label);display:inline-block;width:92px;color:var(--muted);font-size:11px;font-family:var(--sans);}
+    .bottom-nav{
+      display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--ink);z-index:60;
+      padding:6px 6px calc(6px + env(safe-area-inset-bottom));box-shadow:0 -4px 18px rgba(0,0,0,.12);
+    }
+    .bn-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 2px;color:#8B98A2;cursor:pointer;position:relative;}
+    .bn-item.active{color:#fff;}
+    .bn-item svg{width:19px;height:19px;}
+    .bn-item span{font-size:10px;font-weight:500;}
+    .bn-dot{position:absolute;top:3px;right:22%;width:7px;height:7px;border-radius:50%;background:var(--warn);}
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Sidebar (desktop) -->
+  <div class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">ST</div>
+      <div class="brand-text">คลังสต็อก<small>STOCK CONTROL</small></div>
+    </div>
+    <div class="nav-item active" data-view="dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+      แดชบอร์ด
+    </div>
+    <div class="nav-item" data-view="products">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/></svg>
+      สินค้า
+    </div>
+    <div class="nav-item" data-view="transact">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 16V4M7 4l-3 3M7 4l3 3"/><path d="M17 8v12M17 20l3-3M17 20l-3-3"/></svg>
+      รับ/เบิก
+    </div>
+    <div class="nav-item" data-view="history">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+      ประวัติ
+    </div>
+    <div class="sidebar-foot">v1.0 · Google Sheets</div>
+  </div>
+
+  <main>
+    <!-- ================= DASHBOARD ================= -->
+    <section class="view active" id="view-dashboard">
+      <div class="topbar">
+        <div><h1>แดชบอร์ด</h1><div class="sub" id="today-label"></div></div>
+        <button class="refresh-btn" onclick="loadDashboard(true)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg>รีเฟรช</button>
+      </div>
+
+      <div class="stat-grid" id="stat-grid">
+        <div class="stat-card"><div class="label">จำนวนสินค้าทั้งหมด</div><div class="value skeleton" style="height:26px;width:50%">&nbsp;</div></div>
+        <div class="stat-card alert"><div class="label">ของใกล้หมด</div><div class="value skeleton" style="height:26px;width:50%">&nbsp;</div></div>
+        <div class="stat-card"><div class="label">รายการวันนี้</div><div class="value skeleton" style="height:26px;width:50%">&nbsp;</div></div>
+        <div class="stat-card brand-accent"><div class="label">มูลค่าสต็อกรวม (บาท)</div><div class="value skeleton" style="height:26px;width:50%">&nbsp;</div></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>⚠ ของใกล้หมด / ต้องสั่งเพิ่ม</h2></div>
+        <div class="panel-body" id="low-stock-list"><div class="empty-note">กำลังโหลด...</div></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>รายการล่าสุด</h2></div>
+        <div class="panel-body" id="recent-tx-list"><div class="empty-note">กำลังโหลด...</div></div>
+      </div>
+    </section>
+
+    <!-- ================= PRODUCTS ================= -->
+    <section class="view" id="view-products">
+      <div class="topbar">
+        <div><h1>รายการสินค้า</h1><div class="sub" id="product-count-label"></div></div>
+        <button class="btn" onclick="openProductModal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>เพิ่มสินค้า</button>
+      </div>
+      <div class="toolbar">
+        <input type="text" class="search-input" id="product-search" placeholder="ค้นหาชื่อสินค้า, รหัส, หมวดหมู่..." oninput="renderProducts()">
+      </div>
+      <div class="panel">
+        <table>
+          <thead><tr><th>รหัส</th><th>ชื่อสินค้า</th><th>หมวดหมู่</th><th>คงเหลือ</th><th>ราคา/หน่วย</th><th></th></tr></thead>
+          <tbody id="product-table-body">
+            <tr><td colspan="6" class="empty-note">กำลังโหลด...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ================= TRANSACT ================= -->
+    <section class="view" id="view-transact">
+      <div class="topbar"><div><h1>รับเข้า / เบิกออก</h1><div class="sub">บันทึกทุกครั้งที่มีการเคลื่อนไหวสต็อก</div></div></div>
+      <div class="panel">
+        <div class="panel-body pad">
+          <div class="tx-type-toggle">
+            <div class="tx-type-btn sel-in active" data-type="รับเข้า" onclick="setTxType('รับเข้า')">⬇ รับเข้า</div>
+            <div class="tx-type-btn sel-out" data-type="เบิกออก" onclick="setTxType('เบิกออก')">⬆ เบิกออก</div>
+            <div class="tx-type-btn sel-adj" data-type="ปรับปรุงยอด" onclick="setTxType('ปรับปรุงยอด')">⚙ ปรับยอด</div>
+          </div>
+          <form id="tx-form" onsubmit="submitTx(event)">
+            <div class="form-grid">
+              <div class="field full">
+                <label>สินค้า</label>
+                <select id="tx-product" required onchange="updateTxPreview()"></select>
+              </div>
+              <div class="field">
+                <label id="tx-qty-label">จำนวนที่รับเข้า</label>
+                <input type="number" id="tx-qty" min="0" step="1" required oninput="updateTxPreview()">
+              </div>
+              <div class="field">
+                <label>ผู้ทำรายการ</label>
+                <input type="text" id="tx-user" placeholder="ชื่อผู้ทำรายการ" required>
+              </div>
+              <div class="field full">
+                <label>หมายเหตุ (ไม่บังคับ)</label>
+                <input type="text" id="tx-note" placeholder="เช่น รับจากซัพพลายเออร์ / เบิกใช้แผนก...">
+              </div>
+            </div>
+            <div class="stock-preview" id="tx-preview">เลือกสินค้าเพื่อดูยอดคงเหลือ</div>
+            <div class="modal-actions" style="margin-top:16px;">
+              <button type="submit" class="btn" id="tx-submit-btn" style="flex:1;justify-content:center;">บันทึกรายการ</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= HISTORY ================= -->
+    <section class="view" id="view-history">
+      <div class="topbar"><div><h1>ประวัติการทำรายการ</h1><div class="sub" id="history-count-label"></div></div></div>
+      <div class="filter-bar">
+        <select id="hist-type" onchange="loadHistory()">
+          <option value="">ทุกประเภท</option>
+          <option value="รับเข้า">รับเข้า</option>
+          <option value="เบิกออก">เบิกออก</option>
+          <option value="ปรับปรุงยอด">ปรับปรุงยอด</option>
+        </select>
+        <select id="hist-product" onchange="loadHistory()"><option value="">ทุกสินค้า</option></select>
+        <input type="date" id="hist-from" onchange="loadHistory()">
+        <input type="date" id="hist-to" onchange="loadHistory()">
+        <button class="btn secondary" onclick="clearHistoryFilters()">ล้างตัวกรอง</button>
+      </div>
+      <div class="panel">
+        <table>
+          <thead><tr><th>วันเวลา</th><th>สินค้า</th><th>ประเภท</th><th>จำนวน</th><th>คงเหลือหลังทำรายการ</th><th>ผู้ทำรายการ</th><th>หมายเหตุ</th></tr></thead>
+          <tbody id="history-table-body"><tr><td colspan="7" class="empty-note">กำลังโหลด...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Bottom nav (mobile) -->
+<div class="bottom-nav">
+  <div class="bn-item active" data-view="dashboard">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+    <span>หน้าหลัก</span>
+  </div>
+  <div class="bn-item" data-view="products">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/></svg>
+    <span>สินค้า</span>
+    <div class="bn-dot" id="bn-dot-products" style="display:none;"></div>
+  </div>
+  <div class="bn-item" data-view="transact">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 16V4M7 4l-3 3M7 4l3 3"/><path d="M17 8v12M17 20l3-3M17 20l-3-3"/></svg>
+    <span>รับ/เบิก</span>
+  </div>
+  <div class="bn-item" data-view="history">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+    <span>ประวัติ</span>
+  </div>
+</div>
+
+<!-- Product modal -->
+<div class="overlay" id="product-overlay">
+  <div class="modal">
+    <div class="modal-head"><h3 id="product-modal-title">เพิ่มสินค้าใหม่</h3><button class="modal-close" onclick="closeProductModal()">&times;</button></div>
+    <div class="modal-body">
+      <form id="product-form" onsubmit="saveProduct(event)">
+        <input type="hidden" id="p-id">
+        <div class="field"><label>ชื่อสินค้า</label><input type="text" id="p-name" required></div>
+        <div class="form-grid">
+          <div class="field"><label>หมวดหมู่</label><input type="text" id="p-category"></div>
+          <div class="field"><label>หน่วยนับ</label><input type="text" id="p-unit" placeholder="ชิ้น, กล่อง, ขวด..."></div>
+          <div class="field" id="p-qty-field"><label>จำนวนเริ่มต้น</label><input type="number" id="p-qty" min="0" step="1" value="0"></div>
+          <div class="field"><label>จำนวนขั้นต่ำ (แจ้งเตือน)</label><input type="number" id="p-minqty" min="0" step="1" value="0"></div>
+          <div class="field full"><label>ราคาต่อหน่วย (บาท)</label><input type="number" id="p-price" min="0" step="0.01" value="0"></div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn secondary" onclick="closeProductModal()">ยกเลิก</button>
+          <button type="submit" class="btn" id="product-save-btn">บันทึก</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="toast-wrap" id="toast-wrap"></div>
+
+<!-- ตั้งค่า URL ของ Apps Script Web app ที่นี่ -->
+<script src="config.js"></script>
+<script>
+// ===========================================================================
+// API layer — เรียก Google Apps Script Web App ผ่าน fetch()
+// ===========================================================================
+/**
+ * GET ใช้กับ action ที่อ่านข้อมูลอย่างเดียว
+ * (ไม่ตั้ง header เอง เพื่อเลี่ยง CORS preflight ที่ Apps Script ไม่รองรับ)
+ */
+async function apiGet(action, params) {
+  params = params || {};
+  const url = new URL(API_URL);
+  url.searchParams.set('action', action);
+  Object.keys(params).forEach(k => {
+    if (params[k] !== undefined && params[k] !== null && params[k] !== '') url.searchParams.set(k, params[k]);
+  });
+  const res = await fetch(url.toString());
+  const json = await res.json();
+  if (!json.success) throw new Error(json.error || 'เกิดข้อผิดพลาด');
+  return json.data;
+}
+
+/**
+ * POST ใช้กับ action ที่แก้ไขข้อมูล
+ * ตั้ง Content-Type เป็น text/plain โดยตั้งใจ (ไม่ใช่ application/json)
+ * เพื่อให้เบราว์เซอร์ส่งเป็น "simple request" ไม่ต้องทำ CORS preflight (OPTIONS)
+ * ซึ่ง Apps Script Web App ไม่รองรับ
+ */
+async function apiPost(action, data) {
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(Object.assign({ action: action }, data || {}))
+  });
+  const json = await res.json();
+  if (!json.success) throw new Error(json.error || 'เกิดข้อผิดพลาด');
+  return json.data;
+}
+
+// ===========================================================================
+// State
+// ===========================================================================
+let PRODUCTS = [];
+let currentTxType = 'รับเข้า';
+let isDashboardLoaded = false;
+
+// ===========================================================================
+// Navigation
+// ===========================================================================
+function switchView(viewName){
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-' + viewName).classList.add('active');
+  document.querySelectorAll('.nav-item, .bn-item').forEach(n => n.classList.toggle('active', n.dataset.view === viewName));
+
+  if(viewName === 'dashboard') loadDashboard();
+  if(viewName === 'products') loadProducts();
+  if(viewName === 'transact') loadProductsForForm();
+  if(viewName === 'history') loadHistory();
+}
+document.querySelectorAll('[data-view]').forEach(el => {
+  el.addEventListener('click', () => switchView(el.dataset.view));
+});
+
+// ===========================================================================
+// Toast
+// ===========================================================================
+function toast(msg, type){
+  const wrap = document.getElementById('toast-wrap');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' ' + type : '');
+  el.textContent = msg;
+  wrap.appendChild(el);
+  setTimeout(() => el.remove(), 3600);
+}
+function showError(err){
+  toast(typeof err === 'string' ? err : (err.message || 'เกิดข้อผิดพลาด'), 'error');
+}
+
+// ===========================================================================
+// Dashboard
+// ===========================================================================
+function loadDashboard(manual){
+  const btn = document.querySelector('.refresh-btn');
+  if(manual && btn) btn.classList.add('spinning');
+  document.getElementById('today-label').textContent = new Date().toLocaleDateString('th-TH', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+
+  apiGet('getDashboardData')
+    .then(data => { renderDashboard(data); if(btn) btn.classList.remove('spinning'); })
+    .catch(err => { showError(err); if(btn) btn.classList.remove('spinning'); });
+}
+
+function renderDashboard(data){
+  isDashboardLoaded = true;
+  const grid = document.getElementById('stat-grid');
+  grid.innerHTML = `
+    <div class="stat-card"><div class="label">จำนวนสินค้าทั้งหมด</div><div class="value">${data.totalProducts}</div></div>
+    <div class="stat-card alert"><div class="label">ของใกล้หมด</div><div class="value">${data.lowStockCount}</div></div>
+    <div class="stat-card"><div class="label">รายการวันนี้</div><div class="value">${data.todayTransactionCount}</div></div>
+    <div class="stat-card brand-accent"><div class="label">มูลค่าสต็อกรวม (บาท)</div><div class="value">${Math.round(data.totalValue).toLocaleString('th-TH')}</div></div>
+  `;
+
+  const dot = document.getElementById('bn-dot-products');
+  if(dot) dot.style.display = data.lowStockCount > 0 ? 'block' : 'none';
+  const navBadgeExisting = document.querySelector('.nav-item[data-view="products"] .nav-badge');
+  if(navBadgeExisting) navBadgeExisting.remove();
+  if(data.lowStockCount > 0){
+    const badge = document.createElement('span');
+    badge.className = 'nav-badge';
+    badge.textContent = data.lowStockCount;
+    document.querySelector('.nav-item[data-view="products"]').appendChild(badge);
+  }
+
+  const lowList = document.getElementById('low-stock-list');
+  if(data.lowStockList.length === 0){
+    lowList.innerHTML = '<div class="empty-note">ไม่มีสินค้าใกล้หมด ✓</div>';
+  } else {
+    lowList.innerHTML = data.lowStockList.map(p => `
+      <div class="low-row">
+        <div class="low-dot"></div>
+        <div class="name">${escapeHtml(p.name)} <span class="pid">${p.id}</span></div>
+        <div class="qty">${p.qty} / ${p.minQty} ${escapeHtml(p.unit||'')}</div>
+      </div>
+    `).join('');
+  }
+
+  const txList = document.getElementById('recent-tx-list');
+  if(data.recentTransactions.length === 0){
+    txList.innerHTML = '<div class="empty-note">ยังไม่มีรายการ</div>';
+  } else {
+    txList.innerHTML = data.recentTransactions.map(t => txRowHtml(t)).join('');
+  }
+}
+
+function txRowHtml(t){
+  const cls = t.type === 'รับเข้า' ? 'in' : (t.type === 'เบิกออก' ? 'out' : 'adj');
+  const ts = t.timestamp instanceof Date ? t.timestamp : new Date(t.timestamp);
+  const timeStr = isNaN(ts) ? t.timestamp : ts.toLocaleString('th-TH', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+  return `
+    <div class="tx-row">
+      <span class="tx-tag ${cls}">${t.type}</span>
+      <span class="name">${escapeHtml(t.productName)} · ${t.qty} ${t.type==='ปรับปรุงยอด' ? '(ยอดใหม่)' : ''}</span>
+      <span class="time">${timeStr}</span>
+    </div>
+  `;
+}
+
+// ===========================================================================
+// Products
+// ===========================================================================
+function loadProducts(){
+  apiGet('getProducts')
+    .then(list => { PRODUCTS = list; renderProducts(); })
+    .catch(showError);
+}
+
+function renderProducts(){
+  const q = (document.getElementById('product-search').value || '').toLowerCase();
+  const filtered = PRODUCTS.filter(p =>
+    !q || p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q) || (p.category||'').toLowerCase().includes(q)
+  );
+  document.getElementById('product-count-label').textContent = `ทั้งหมด ${PRODUCTS.length} รายการ`;
+  const body = document.getElementById('product-table-body');
+
+  if(filtered.length === 0){
+    body.innerHTML = '<tr><td colspan="6" class="empty-note">ไม่พบสินค้า</td></tr>';
+    return;
+  }
+
+  body.innerHTML = filtered.map(p => {
+    const qty = Number(p.qty), min = Number(p.minQty) || 1;
+    const pct = Math.min(100, Math.round((qty / (min * 2 || 1)) * 100));
+    const isLow = qty <= Number(p.minQty);
+    return `
+    <tr>
+      <td class="mono-label pid" data-label="รหัส">${p.id}</td>
+      <td class="mono-label" data-label="ชื่อสินค้า"><strong>${escapeHtml(p.name)}</strong></td>
+      <td class="mono-label" data-label="หมวดหมู่">${escapeHtml(p.category||'-')}</td>
+      <td class="mono-label" data-label="คงเหลือ">
+        <div class="qty-cell">
+          <div class="gauge ${isLow?'low':''}"><div style="width:${pct}%"></div></div>
+          ${qty} ${escapeHtml(p.unit||'')}
+          ${isLow ? '<span class="badge-low">ใกล้หมด</span>' : ''}
+        </div>
+      </td>
+      <td class="mono-label mono" data-label="ราคา/หน่วย">฿${Number(p.price||0).toLocaleString('th-TH')}</td>
+      <td class="mono-label" data-label="">
+        <div class="row-actions">
+          <button class="icon-btn" title="แก้ไข" onclick='openProductModal(${JSON.stringify(p)})'>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          </button>
+          <button class="icon-btn danger" title="ลบ" onclick="deleteProductConfirm('${p.id}','${escapeHtml(p.name)}')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6"/></svg>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openProductModal(product){
+  document.getElementById('product-form').reset();
+  const qtyField = document.getElementById('p-qty-field');
+  if(product){
+    document.getElementById('product-modal-title').textContent = 'แก้ไขสินค้า';
+    document.getElementById('p-id').value = product.id;
+    document.getElementById('p-name').value = product.name;
+    document.getElementById('p-category').value = product.category || '';
+    document.getElementById('p-unit').value = product.unit || '';
+    document.getElementById('p-minqty').value = product.minQty;
+    document.getElementById('p-price').value = product.price;
+    qtyField.style.display = 'none'; // แก้จำนวนผ่านหน้า รับ/เบิก เท่านั้น
+  } else {
+    document.getElementById('product-modal-title').textContent = 'เพิ่มสินค้าใหม่';
+    document.getElementById('p-id').value = '';
+    qtyField.style.display = '';
+  }
+  document.getElementById('product-overlay').classList.add('show');
+}
+function closeProductModal(){
+  document.getElementById('product-overlay').classList.remove('show');
+}
+
+function saveProduct(e){
+  e.preventDefault();
+  const btn = document.getElementById('product-save-btn');
+  btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+
+  const id = document.getElementById('p-id').value;
+  const payload = {
+    id: id,
+    name: document.getElementById('p-name').value.trim(),
+    category: document.getElementById('p-category').value.trim(),
+    unit: document.getElementById('p-unit').value.trim(),
+    qty: document.getElementById('p-qty').value,
+    minQty: document.getElementById('p-minqty').value,
+    price: document.getElementById('p-price').value
+  };
+
+  const onDone = () => {
+    btn.disabled = false; btn.textContent = 'บันทึก';
+    closeProductModal();
+    toast(id ? 'แก้ไขสินค้าเรียบร้อย' : 'เพิ่มสินค้าเรียบร้อย', 'success');
+    loadProducts();
+    if(isDashboardLoaded) loadDashboard();
+  };
+  const onFail = (err) => { btn.disabled = false; btn.textContent = 'บันทึก'; showError(err); };
+
+  const req = id ? apiPost('updateProduct', payload) : apiPost('addProduct', payload);
+  req.then(onDone).catch(onFail);
+}
+
+function deleteProductConfirm(id, name){
+  if(!confirm(`ยืนยันลบ "${name}" ออกจากระบบ?`)) return;
+  apiPost('deleteProduct', { id: id })
+    .then(() => { toast('ลบสินค้าเรียบร้อย', 'success'); loadProducts(); if(isDashboardLoaded) loadDashboard(); })
+    .catch(showError);
+}
+
+// ===========================================================================
+// Transact (stock in / out / adjust)
+// ===========================================================================
+function loadProductsForForm(){
+  apiGet('getProducts')
+    .then(list => {
+      PRODUCTS = list;
+      const sel = document.getElementById('tx-product');
+      sel.innerHTML = '<option value="">-- เลือกสินค้า --</option>' + list.map(p => `<option value="${p.id}">${escapeHtml(p.name)} (${p.id})</option>`).join('');
+    })
+    .catch(showError);
+}
+
+function setTxType(type){
+  currentTxType = type;
+  document.querySelectorAll('.tx-type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === type));
+  const label = document.getElementById('tx-qty-label');
+  label.textContent = type === 'รับเข้า' ? 'จำนวนที่รับเข้า' : (type === 'เบิกออก' ? 'จำนวนที่เบิกออก' : 'ยอดคงเหลือใหม่ (ตั้งค่าตรงๆ)');
+  updateTxPreview();
+}
+
+function updateTxPreview(){
+  const pid = document.getElementById('tx-product').value;
+  const qty = Number(document.getElementById('tx-qty').value) || 0;
+  const preview = document.getElementById('tx-preview');
+  const product = PRODUCTS.find(p => p.id === pid);
+  if(!product){ preview.textContent = 'เลือกสินค้าเพื่อดูยอดคงเหลือ'; return; }
+
+  const current = Number(product.qty);
+  let next = current;
+  if(currentTxType === 'รับเข้า') next = current + qty;
+  else if(currentTxType === 'เบิกออก') next = current - qty;
+  else next = qty;
+
+  preview.textContent = `คงเหลือปัจจุบัน: ${current} ${product.unit||''}  →  หลังทำรายการ: ${next} ${product.unit||''}`;
+}
+
+function submitTx(e){
+  e.preventDefault();
+  const btn = document.getElementById('tx-submit-btn');
+  const pid = document.getElementById('tx-product').value;
+  if(!pid){ showError('กรุณาเลือกสินค้า'); return; }
+
+  btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+  const payload = {
+    productId: pid,
+    type: currentTxType,
+    qty: document.getElementById('tx-qty').value,
+    user: document.getElementById('tx-user').value.trim(),
+    note: document.getElementById('tx-note').value.trim()
+  };
+
+  apiPost('stockTransaction', payload)
+    .then(res => {
+      btn.disabled = false; btn.textContent = 'บันทึกรายการ';
+      toast(`บันทึกสำเร็จ · ยอดใหม่ ${res.newQty}`, 'success');
+      document.getElementById('tx-form').reset();
+      document.getElementById('tx-preview').textContent = 'เลือกสินค้าเพื่อดูยอดคงเหลือ';
+      loadProductsForForm();
+      if(isDashboardLoaded) loadDashboard();
+    })
+    .catch(err => { btn.disabled = false; btn.textContent = 'บันทึกรายการ'; showError(err); });
+}
+
+// ===========================================================================
+// History
+// ===========================================================================
+function loadHistory(){
+  if(document.getElementById('hist-product').options.length <= 1){
+    apiGet('getProducts').then(list => {
+      const sel = document.getElementById('hist-product');
+      sel.innerHTML = '<option value="">ทุกสินค้า</option>' + list.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+    }).catch(showError);
+  }
+
+  const filters = {
+    type: document.getElementById('hist-type').value,
+    productId: document.getElementById('hist-product').value,
+    dateFrom: document.getElementById('hist-from').value,
+    dateTo: document.getElementById('hist-to').value
+  };
+
+  apiGet('getTransactions', filters)
+    .then(renderHistory)
+    .catch(showError);
+}
+
+function renderHistory(list){
+  document.getElementById('history-count-label').textContent = `พบ ${list.length} รายการ`;
+  const body = document.getElementById('history-table-body');
+  if(list.length === 0){
+    body.innerHTML = '<tr><td colspan="7" class="empty-note">ไม่พบรายการ</td></tr>';
+    return;
+  }
+  body.innerHTML = list.map(t => {
+    const cls = t.type === 'รับเข้า' ? 'in' : (t.type === 'เบิกออก' ? 'out' : 'adj');
+    return `
+    <tr>
+      <td class="mono-label mono" data-label="วันเวลา">${t.timestamp}</td>
+      <td class="mono-label" data-label="สินค้า">${escapeHtml(t.productName)}</td>
+      <td class="mono-label" data-label="ประเภท"><span class="tx-tag ${cls}">${t.type}</span></td>
+      <td class="mono-label mono" data-label="จำนวน">${t.qty}</td>
+      <td class="mono-label mono" data-label="คงเหลือ">${t.balanceAfter}</td>
+      <td class="mono-label" data-label="ผู้ทำรายการ">${escapeHtml(t.user||'-')}</td>
+      <td class="mono-label" data-label="หมายเหตุ">${escapeHtml(t.note||'-')}</td>
+    </tr>`;
+  }).join('');
+}
+
+function clearHistoryFilters(){
+  document.getElementById('hist-type').value = '';
+  document.getElementById('hist-product').value = '';
+  document.getElementById('hist-from').value = '';
+  document.getElementById('hist-to').value = '';
+  loadHistory();
+}
+
+// ===========================================================================
+// Utils
+// ===========================================================================
+function escapeHtml(str){
+  if(str === null || str === undefined) return '';
+  return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+// ===========================================================================
+// Init
+// ===========================================================================
+loadDashboard();
+</script>
+</body>
+</html>
