@@ -118,7 +118,7 @@
   .gauge.low > div{background:var(--warn);}
   .qty-cell{display:flex;align-items:center;}
   .badge-low{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--warn);background:var(--warn-soft);padding:2px 6px;border-radius:5px;margin-left:8px;}
-  .row-actions{display:flex;gap:6px;}
+  .row-actions{display:flex;gap:6px;flex-wrap:wrap;}
   .icon-btn{
     border:1px solid var(--line);background:var(--surface);width:30px;height:30px;border-radius:7px;
     display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink-soft);
@@ -126,6 +126,8 @@
   .icon-btn:hover{border-color:var(--brand);color:var(--brand-dark);}
   .icon-btn svg{width:14px;height:14px;}
   .icon-btn.danger:hover{border-color:var(--warn);color:var(--warn);}
+  .icon-btn.stockin:hover{border-color:var(--brand);color:var(--brand-dark);}
+  .icon-btn.stockout:hover{border-color:var(--warn);color:var(--warn);}
 
   .toolbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;}
   .search-input{
@@ -133,7 +135,7 @@
     font-size:13.5px;font-family:inherit;background:var(--surface);
   }
   .search-input:focus{outline:none;border-color:var(--brand);}
-  select, input[type=text], input[type=number], input[type=date], textarea{
+  select, input[type=text], input[type=number], input[type=date], input[type=password], textarea{
     font-family:inherit;font-size:13.5px;padding:9px 11px;border:1px solid var(--line);
     border-radius:8px;background:var(--surface);color:var(--ink);width:100%;
   }
@@ -409,11 +411,36 @@
   </div>
 </div>
 
+<!-- Password modal -->
+<div class="overlay" id="password-overlay">
+  <div class="modal" style="max-width:340px;">
+    <div class="modal-head"><h3>ยืนยันตัวตน</h3><button class="modal-close" onclick="closePasswordModal()">&times;</button></div>
+    <div class="modal-body">
+      <form id="password-form" onsubmit="submitPasswordModal(event)">
+        <div class="field">
+          <label>กรุณาใส่รหัสผ่านเพื่อดำเนินการต่อ</label>
+          <input type="password" id="password-input" autocomplete="off" autofocus>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn secondary" onclick="closePasswordModal()">ยกเลิก</button>
+          <button type="submit" class="btn">ยืนยัน</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <div class="toast-wrap" id="toast-wrap"></div>
 
 <!-- ตั้งค่า URL ของ Apps Script Web app ที่นี่ -->
 <script src="config.js"></script>
 <script>
+// ===========================================================================
+// ตั้งค่ารหัสผ่านสำหรับยืนยันก่อนแก้ไข/ลบสินค้า
+// เปลี่ยนรหัสผ่านได้ตรงนี้ (หรือกำหนด ADMIN_PASSWORD ไว้ใน config.js ก็ได้)
+// ===========================================================================
+const ADMIN_PASSWORD = (typeof CONFIG_ADMIN_PASSWORD !== 'undefined') ? CONFIG_ADMIN_PASSWORD : '1234';
+
 // ===========================================================================
 // API layer — เรียก Google Apps Script Web App ผ่าน fetch()
 // ===========================================================================
@@ -459,21 +486,68 @@ let currentTxType = 'รับเข้า';
 let isDashboardLoaded = false;
 
 // ===========================================================================
+// Password gate — ใช้ก่อนแก้ไข/ลบสินค้า
+// ===========================================================================
+let pendingPasswordAction = null;
+
+function requirePassword(callback){
+  pendingPasswordAction = callback;
+  document.getElementById('password-input').value = '';
+  document.getElementById('password-overlay').classList.add('show');
+  setTimeout(() => document.getElementById('password-input').focus(), 50);
+}
+
+function closePasswordModal(){
+  document.getElementById('password-overlay').classList.remove('show');
+  pendingPasswordAction = null;
+}
+
+function submitPasswordModal(e){
+  e.preventDefault();
+  const entered = document.getElementById('password-input').value;
+  const action = pendingPasswordAction;
+  document.getElementById('password-overlay').classList.remove('show');
+  pendingPasswordAction = null;
+  if(entered !== ADMIN_PASSWORD){
+    toast('รหัสผ่านไม่ถูกต้อง', 'error');
+    return;
+  }
+  if(typeof action === 'function') action();
+}
+
+// ===========================================================================
 // Navigation
 // ===========================================================================
-function switchView(viewName){
+function switchView(viewName, opts){
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + viewName).classList.add('active');
   document.querySelectorAll('.nav-item, .bn-item').forEach(n => n.classList.toggle('active', n.dataset.view === viewName));
 
   if(viewName === 'dashboard') loadDashboard();
   if(viewName === 'products') loadProducts();
-  if(viewName === 'transact') loadProductsForForm();
+  if(viewName === 'transact'){
+    loadProductsForForm().then(() => {
+      if(opts && opts.type) setTxType(opts.type);
+      if(opts && opts.productId){
+        document.getElementById('tx-product-code').value = opts.productId;
+        updateTxPreview();
+        const qtyInput = document.getElementById('tx-qty');
+        if(qtyInput) qtyInput.focus();
+      } else {
+        updateTxPreview();
+      }
+    });
+  }
   if(viewName === 'history') loadHistory();
 }
 document.querySelectorAll('[data-view]').forEach(el => {
   el.addEventListener('click', () => switchView(el.dataset.view));
 });
+
+// เปิดหน้ารับ/เบิก พร้อมเลือกสินค้าและประเภทรายการล่วงหน้า (เรียกจากปุ่มในตารางสินค้า)
+function goToProductTransact(productId, type){
+  switchView('transact', { productId: productId, type: type });
+}
 
 // ===========================================================================
 // Toast
@@ -599,10 +673,16 @@ function renderProducts(){
       <td class="mono-label mono" data-label="ราคา/หน่วย">฿${Number(p.price||0).toLocaleString('th-TH')}</td>
       <td class="mono-label" data-label="">
         <div class="row-actions">
-          <button class="icon-btn" title="แก้ไข" onclick='openProductModal(${JSON.stringify(p)})'>
+          <button class="icon-btn stockin" title="เบิกเข้า" onclick="goToProductTransact('${p.id}','รับเข้า')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>
+          </button>
+          <button class="icon-btn stockout" title="เบิกออก" onclick="goToProductTransact('${p.id}','เบิกออก')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+          </button>
+          <button class="icon-btn" title="แก้ไข" onclick='requirePassword(function(){ openProductModal(${JSON.stringify(p)}); })'>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
           </button>
-          <button class="icon-btn danger" title="ลบ" onclick="deleteProductConfirm('${p.id}','${escapeHtml(p.name)}')">
+          <button class="icon-btn danger" title="ลบ" onclick="requirePassword(function(){ deleteProductConfirm('${p.id}','${escapeHtml(p.name)}'); })">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6"/></svg>
           </button>
         </div>
@@ -674,12 +754,11 @@ function deleteProductConfirm(id, name){
 // Transact (stock in / out / adjust)
 // ===========================================================================
 function loadProductsForForm(){
-  apiGet('getProducts')
+  return apiGet('getProducts')
     .then(list => {
       PRODUCTS = list;
       const dl = document.getElementById('tx-product-datalist');
       dl.innerHTML = list.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
-      updateTxPreview();
     })
     .catch(showError);
 }
