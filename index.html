@@ -204,6 +204,72 @@
     animation:shimmer 1.3s infinite;border-radius:6px;}
   @keyframes shimmer{0%{background-position:100% 0;}100%{background-position:0 0;}}
 
+  /* ---------- hint bubble ---------- */
+  .hint-bubble{
+    display:none;
+    position:absolute;
+    bottom:calc(100% + 12px);
+    left:50%;
+    transform:translateX(-50%);
+    background:var(--ink);
+    color:#fff;
+    padding:10px 14px;
+    border-radius:10px;
+    font-size:12.5px;
+    font-weight:500;
+    white-space:nowrap;
+    box-shadow:0 10px 24px rgba(0,0,0,.22);
+    cursor:pointer;
+    z-index:20;
+    align-items:center;
+    gap:8px;
+    animation:bubbleIn .25s ease;
+  }
+  .hint-bubble::after{
+    content:'';
+    position:absolute;
+    top:100%;
+    left:50%;
+    transform:translateX(-50%);
+    border:7px solid transparent;
+    border-top-color:var(--ink);
+  }
+  .hint-bubble .hint-close{
+    background:rgba(255,255,255,.18);
+    border:none;
+    color:#fff;
+    width:18px;height:18px;
+    border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-size:12px;line-height:1;
+    cursor:pointer;
+    flex-shrink:0;
+    padding:0;
+  }
+  .hint-bubble .hint-close:hover{background:rgba(255,255,255,.32);}
+  @keyframes bubbleIn{from{opacity:0;transform:translateX(-50%) translateY(6px);}to{opacity:1;transform:translateX(-50%) translateY(0);}}
+
+  /* side variant: bubble sits to the right of its anchor, arrow points left */
+  .hint-bubble.hint-bubble-side{
+    bottom:auto;
+    top:50%;
+    left:calc(100% + 14px);
+    transform:translateY(-50%);
+  }
+  .hint-bubble.hint-bubble-side::after{
+    top:50%;
+    left:-14px;
+    transform:translateY(-50%);
+    border-top-color:transparent;
+    border-right-color:var(--ink);
+  }
+  @keyframes bubbleInSide{from{opacity:0;transform:translateY(-50%) translateX(-6px);}to{opacity:1;transform:translateY(-50%) translateX(0);}}
+  .hint-bubble.hint-bubble-side{animation:bubbleInSide .25s ease;}
+
+  @media (max-width:860px){
+    .hint-bubble{white-space:normal;max-width:200px;font-size:12px;text-align:left;}
+  }
+
   /* ---------- mobile ---------- */
   .bottom-nav{display:none;}
   @media (max-width:860px){
@@ -245,9 +311,13 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/></svg>
       สินค้า
     </div>
-    <div class="nav-item" data-view="transact">
+    <div class="nav-item" data-view="transact" style="position:relative;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 16V4M7 4l-3 3M7 4l3 3"/><path d="M17 8v12M17 20l3-3M17 20l-3-3"/></svg>
       รับ/เบิก
+      <div class="hint-bubble hint-bubble-side" onclick="event.stopPropagation(); openWithdrawFromHint();">
+        <span>ต้องการเบิกอะไหล่? กดตรงนี้</span>
+        <button type="button" class="hint-close" onclick="event.stopPropagation(); dismissWithdrawHint();">×</button>
+      </div>
     </div>
     <div class="nav-item" data-view="history">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
@@ -309,7 +379,6 @@
           <div class="tx-type-toggle">
             <div class="tx-type-btn sel-in active" data-type="รับเข้า" onclick="setTxType('รับเข้า')">⬇ รับเข้า</div>
             <div class="tx-type-btn sel-out" data-type="เบิกออก" onclick="setTxType('เบิกออก')">⬆ เบิกออก</div>
-            <div class="tx-type-btn sel-adj" data-type="ปรับปรุงยอด" onclick="setTxType('ปรับปรุงยอด')">⚙ ปรับยอด</div>
           </div>
           <form id="tx-form" onsubmit="submitTx(event)">
             <div class="form-grid">
@@ -377,9 +446,13 @@
     <span>สินค้า</span>
     <div class="bn-dot" id="bn-dot-products" style="display:none;"></div>
   </div>
-  <div class="bn-item" data-view="transact">
+  <div class="bn-item" data-view="transact" style="position:relative;">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 16V4M7 4l-3 3M7 4l3 3"/><path d="M17 8v12M17 20l3-3M17 20l-3-3"/></svg>
     <span>รับ/เบิก</span>
+    <div class="hint-bubble" onclick="event.stopPropagation(); openWithdrawFromHint();">
+      <span>เบิกอะไหล่กดตรงนี้</span>
+      <button type="button" class="hint-close" onclick="event.stopPropagation(); dismissWithdrawHint();">×</button>
+    </div>
   </div>
   <div class="bn-item" data-view="history">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
@@ -516,6 +589,25 @@ function submitPasswordModal(e){
 }
 
 // ===========================================================================
+// Withdraw hint bubble — เตือนบนปุ่ม "เบิกออก" ในหน้ารับ/เบิก
+// ===========================================================================
+function showWithdrawHintIfNeeded(){
+  let seen = false;
+  try{ seen = localStorage.getItem('stock_hint_withdraw_seen') === '1'; }catch(e){}
+  document.querySelectorAll('.hint-bubble').forEach(el => { el.style.display = seen ? 'none' : 'flex'; });
+}
+
+function dismissWithdrawHint(){
+  document.querySelectorAll('.hint-bubble').forEach(el => { el.style.display = 'none'; });
+  try{ localStorage.setItem('stock_hint_withdraw_seen', '1'); }catch(e){}
+}
+
+function openWithdrawFromHint(){
+  dismissWithdrawHint();
+  switchView('transact', { type: 'เบิกออก' });
+}
+
+// ===========================================================================
 // Navigation
 // ===========================================================================
 function switchView(viewName, opts){
@@ -526,6 +618,7 @@ function switchView(viewName, opts){
   if(viewName === 'dashboard') loadDashboard();
   if(viewName === 'products') loadProducts();
   if(viewName === 'transact'){
+    dismissWithdrawHint();
     loadProductsForForm().then(() => {
       if(opts && opts.type) setTxType(opts.type);
       if(opts && opts.productId){
@@ -897,6 +990,7 @@ function escapeHtml(str){
 // Init
 // ===========================================================================
 loadDashboard();
+showWithdrawHintIfNeeded();
 </script>
 </body>
 </html>
