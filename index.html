@@ -140,6 +140,7 @@
     border-radius:8px;background:var(--surface);color:var(--ink);width:100%;
   }
   select:focus, input:focus, textarea:focus{outline:none;border-color:var(--brand);}
+  .toolbar select{width:auto;min-width:150px;flex:none;}
 
   .btn{
     border:none;background:var(--brand);color:#fff;padding:9px 16px;border-radius:8px;
@@ -360,6 +361,9 @@
       </div>
       <div class="toolbar">
         <input type="text" class="search-input" id="product-search" placeholder="ค้นหาชื่อสินค้า, รหัส, หมวดหมู่..." oninput="renderProducts()">
+        <select id="product-category-filter" onchange="renderProducts()">
+          <option value="">ทุกตู้ / หมวดหมู่</option>
+        </select>
       </div>
       <div class="panel">
         <table>
@@ -469,7 +473,7 @@
         <input type="hidden" id="p-id">
         <div class="field"><label>ชื่อสินค้า</label><input type="text" id="p-name" required></div>
         <div class="form-grid">
-          <div class="field"><label>หมวดหมู่</label><input type="text" id="p-category"></div>
+          <div class="field"><label>หมวดหมู่ / ตู้</label><input type="text" id="p-category" list="p-category-datalist" placeholder="เช่น ตู้ 1, ตู้ 2..."><datalist id="p-category-datalist"></datalist></div>
           <div class="field"><label>หน่วยนับ</label><input type="text" id="p-unit" placeholder="ชิ้น, กล่อง, ขวด..."></div>
           <div class="field" id="p-qty-field"><label>จำนวนเริ่มต้น</label><input type="number" id="p-qty" min="0" step="1" value="0"></div>
           <div class="field"><label>จำนวนขั้นต่ำ (แจ้งเตือน)</label><input type="number" id="p-minqty" min="0" step="1" value="0"></div>
@@ -730,16 +734,39 @@ function txRowHtml(t){
 // ===========================================================================
 function loadProducts(){
   apiGet('getProducts')
-    .then(list => { PRODUCTS = list; renderProducts(); })
+    .then(list => { PRODUCTS = list; populateCategoryFilter(); renderProducts(); })
     .catch(showError);
+}
+
+// สร้างรายการตัวเลือกใน dropdown "ตู้/หมวดหมู่" จากค่าหมวดหมู่ที่มีอยู่จริงในสินค้าทั้งหมด
+function populateCategoryFilter(){
+  const sel = document.getElementById('product-category-filter');
+  if(!sel) return;
+  const prevValue = sel.value;
+  const categories = Array.from(new Set(
+    PRODUCTS.map(p => (p.category || '').trim()).filter(c => c !== '')
+  )).sort((a, b) => a.localeCompare(b, 'th'));
+
+  sel.innerHTML = '<option value="">ทุกตู้ / หมวดหมู่</option>' +
+    categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+
+  // เก็บค่าที่เลือกไว้เดิม ถ้ายังมีอยู่ในลิสต์
+  if(categories.includes(prevValue)) sel.value = prevValue;
+
+  // เติม datalist ในฟอร์มเพิ่ม/แก้ไขสินค้าด้วย เพื่อให้พิมพ์ชื่อตู้ซ้ำได้ง่าย
+  const dl = document.getElementById('p-category-datalist');
+  if(dl) dl.innerHTML = categories.map(c => `<option value="${escapeHtml(c)}">`).join('');
 }
 
 function renderProducts(){
   const q = (document.getElementById('product-search').value || '').toLowerCase();
-  const filtered = PRODUCTS.filter(p =>
-    !q || p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q) || (p.category||'').toLowerCase().includes(q)
-  );
-  document.getElementById('product-count-label').textContent = `ทั้งหมด ${PRODUCTS.length} รายการ`;
+  const categoryFilter = document.getElementById('product-category-filter').value;
+  const filtered = PRODUCTS.filter(p => {
+    const matchesSearch = !q || p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q) || (p.category||'').toLowerCase().includes(q);
+    const matchesCategory = !categoryFilter || (p.category || '') === categoryFilter;
+    return matchesSearch && matchesCategory;
+  });
+  document.getElementById('product-count-label').textContent = `ทั้งหมด ${PRODUCTS.length} รายการ` + (categoryFilter ? ` · แสดง ${filtered.length} รายการใน "${categoryFilter}"` : '');
   const body = document.getElementById('product-table-body');
 
   if(filtered.length === 0){
