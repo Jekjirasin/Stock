@@ -762,8 +762,14 @@ function renderProducts(){
   const q = (document.getElementById('product-search').value || '').toLowerCase();
   const categoryFilter = document.getElementById('product-category-filter').value;
   const filtered = PRODUCTS.filter(p => {
-    const matchesSearch = !q || p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q) || (p.category||'').toLowerCase().includes(q);
-    const matchesCategory = !categoryFilter || (p.category || '') === categoryFilter;
+    // FIX: บังคับแปลง p.id และ p.name เป็น string ก่อน .toLowerCase()
+    // เพราะบางครั้ง backend (Google Apps Script) อาจส่งค่า id กลับมาเป็นตัวเลข (number)
+    // ถ้ารหัสสินค้าในชีตเป็นตัวเลขล้วน หรือส่งกลับมาเป็น null/undefined สำหรับแถวว่าง
+    const pid = String(p.id ?? '');
+    const pname = String(p.name ?? '');
+    const pcategory = String(p.category ?? '');
+    const matchesSearch = !q || pname.toLowerCase().includes(q) || pid.toLowerCase().includes(q) || pcategory.toLowerCase().includes(q);
+    const matchesCategory = !categoryFilter || pcategory === categoryFilter;
     return matchesSearch && matchesCategory;
   });
   document.getElementById('product-count-label').textContent = `ทั้งหมด ${PRODUCTS.length} รายการ` + (categoryFilter ? ` · แสดง ${filtered.length} รายการใน "${categoryFilter}"` : '');
@@ -886,7 +892,8 @@ function loadProductsForForm(){
 function findTxProduct(){
   const code = (document.getElementById('tx-product-code').value || '').trim();
   if(!code) return null;
-  return PRODUCTS.find(p => p.id.toLowerCase() === code.toLowerCase()) || null;
+  // FIX: บังคับแปลง p.id เป็น string ก่อนเทียบ เผื่อ backend ส่งค่ากลับมาเป็นตัวเลข
+  return PRODUCTS.find(p => String(p.id ?? '').toLowerCase() === code.toLowerCase()) || null;
 }
 
 function setTxType(type){
