@@ -175,6 +175,20 @@
   .filter-bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
   .filter-bar > *{min-width:140px;}
 
+  /* ---------- product group headers ---------- */
+  tr.group-header{cursor:pointer;background:var(--bg);}
+  tr.group-header:hover td{background:#EEF0F2;}
+  tr.group-header td{padding:10px 18px;border-bottom:1px solid var(--line);}
+  .group-title{display:flex;align-items:center;gap:9px;font-weight:700;font-size:13px;color:var(--ink-soft);}
+  .group-title .chevron{flex-shrink:0;transition:transform .15s ease;color:var(--muted);}
+  tr.group-header.collapsed .chevron{transform:rotate(-90deg);}
+  .group-count{font-family:var(--mono);font-weight:500;font-size:11.5px;color:var(--muted);margin-left:auto;}
+  .group-count .glow-warn{color:var(--warn);}
+  @media (max-width:860px){
+    tr.group-header td{padding:11px 6px;}
+    .group-title{font-size:13px;}
+  }
+
   /* ---------- modal ---------- */
   .overlay{
     position:fixed;inset:0;background:rgba(22,35,46,.45);display:none;align-items:center;justify-content:center;
@@ -364,6 +378,8 @@
         <select id="product-category-filter" onchange="renderProducts()">
           <option value="">ทุกตู้ / หมวดหมู่</option>
         </select>
+        <button class="btn secondary" type="button" onclick="expandAllGroups()">ขยายทั้งหมด</button>
+        <button class="btn secondary" type="button" onclick="collapseAllGroups()">ย่อทั้งหมด</button>
       </div>
       <div class="panel">
         <table>
@@ -402,7 +418,7 @@
               </div>
               <div class="field full">
                 <label>หมายเหตุ</label>
-                <input type="text" id="tx-note" placeholder="เช่น รับจากซัพพลายเออร์ / เบิกใช้แผนก...">
+                <input type="text" id="tx-note" placeholder="เช่น รับจากซัพพลายเออร์/เบิกใช้แผนก..." pattern="\S*" title="ห้ามมีช่องว่าง" oninput="this.value = this.value.replace(/\s/g,'')">
               </div>
             </div>
             <div class="stock-preview" id="tx-preview">เลือกสินค้าเพื่อดูยอดคงเหลือ</div>
@@ -561,6 +577,15 @@ async function apiPost(action, data) {
 let PRODUCTS = [];
 let currentTxType = 'รับเข้า';
 let isDashboardLoaded = false;
+let COLLAPSED_GROUPS = new Set();
+try {
+  const savedCollapsed = JSON.parse(localStorage.getItem('stock_collapsed_groups') || '[]');
+  COLLAPSED_GROUPS = new Set(savedCollapsed);
+} catch (e) {}
+
+function saveCollapsedGroups(){
+  try { localStorage.setItem('stock_collapsed_groups', JSON.stringify(Array.from(COLLAPSED_GROUPS))); } catch(e){}
+}
 
 // ===========================================================================
 // Password gate — ใช้ก่อนแก้ไข/ลบสินค้า
@@ -758,6 +783,44 @@ function populateCategoryFilter(){
   if(dl) dl.innerHTML = categories.map(c => `<option value="${escapeHtml(c)}">`).join('');
 }
 
+// จัดกลุ่มสินค้าตามตู้/หมวดหมู่ แล้วเรียงชื่อกลุ่มตามตัวอักษรไทย
+// (สินค้าที่ไม่ได้ระบุหมวดหมู่ จะถูกจัดไว้ในกลุ่ม "ไม่ระบุหมวดหมู่" ท้ายสุด)
+const UNCATEGORIZED_LABEL = 'ไม่ระบุหมวดหมู่';
+function groupProductsByCategory(list){
+  const groups = {};
+  list.forEach(p => {
+    const cat = (p.category || '').trim() || UNCATEGORIZED_LABEL;
+    if(!groups[cat]) groups[cat] = [];
+    groups[cat].push(p);
+  });
+  const names = Object.keys(groups).sort((a, b) => {
+    if(a === UNCATEGORIZED_LABEL) return 1;
+    if(b === UNCATEGORIZED_LABEL) return -1;
+    return a.localeCompare(b, 'th');
+  });
+  return { groups, names };
+}
+
+function toggleGroup(cat){
+  if(COLLAPSED_GROUPS.has(cat)) COLLAPSED_GROUPS.delete(cat);
+  else COLLAPSED_GROUPS.add(cat);
+  saveCollapsedGroups();
+  renderProducts();
+}
+
+function expandAllGroups(){
+  COLLAPSED_GROUPS.clear();
+  saveCollapsedGroups();
+  renderProducts();
+}
+
+function collapseAllGroups(){
+  const { names } = groupProductsByCategory(PRODUCTS);
+  COLLAPSED_GROUPS = new Set(names);
+  saveCollapsedGroups();
+  renderProducts();
+}
+
 function renderProducts(){
   const q = (document.getElementById('product-search').value || '').toLowerCase();
   const categoryFilter = document.getElementById('product-category-filter').value;
@@ -780,11 +843,36 @@ function renderProducts(){
     return;
   }
 
-  body.innerHTML = filtered.map(p => {
-    const qty = Number(p.qty), min = Number(p.minQty) || 1;
-    const pct = Math.min(100, Math.round((qty / (min * 2 || 1)) * 100));
-    const isLow = qty <= Number(p.minQty);
-    return `
+  const { groups, names } = groupProductsByCategory(filtered);
+
+  body.innerHTML = names.map(cat => {
+    const items = groups[cat];
+    const lowCount = items.filter(p => Number(p.qty) <= Number(p.minQty)).length;
+    const collapsed = COLLAPSED_GROUPS.has(cat);
+    const headerRow = `
+      <tr class="group-header${collapsed ? ' collapsed' : ''}" data-group-toggle="${escapeHtml(cat)}">
+        <td colspan="6">
+          <div class="group-title">
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M9 6l6 6-6 6"/></svg>
+            <span>${escapeHtml(cat)}</span>
+            <span class="group-count">${items.length} รายการ${lowCount > 0 ? ` · <span class="glow-warn">ใกล้หมด ${lowCount}</span>` : ''}</span>
+          </div>
+        </td>
+      </tr>`;
+    const itemRows = collapsed ? '' : items.map(productRowHtml).join('');
+    return headerRow + itemRows;
+  }).join('');
+
+  body.querySelectorAll('[data-group-toggle]').forEach(el => {
+    el.addEventListener('click', () => toggleGroup(el.getAttribute('data-group-toggle')));
+  });
+}
+
+function productRowHtml(p){
+  const qty = Number(p.qty), min = Number(p.minQty) || 1;
+  const pct = Math.min(100, Math.round((qty / (min * 2 || 1)) * 100));
+  const isLow = qty <= Number(p.minQty);
+  return `
     <tr>
       <td class="mono-label pid" data-label="รหัส">${p.id}</td>
       <td class="mono-label" data-label="ชื่อสินค้า"><strong>${escapeHtml(p.name)}</strong></td>
@@ -814,7 +902,6 @@ function renderProducts(){
         </div>
       </td>
     </tr>`;
-  }).join('');
 }
 
 function openProductModal(product){
