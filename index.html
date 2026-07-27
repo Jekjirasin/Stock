@@ -441,14 +441,15 @@
           <option value="ปรับปรุงยอด">ปรับปรุงยอด</option>
         </select>
         <select id="hist-product" onchange="loadHistory()"><option value="">ทุกสินค้า</option></select>
+        <select id="hist-category" onchange="loadHistory()"><option value="">ทุกตู้ / หมวดหมู่</option></select>
         <input type="date" id="hist-from" onchange="loadHistory()">
         <input type="date" id="hist-to" onchange="loadHistory()">
         <button class="btn secondary" onclick="clearHistoryFilters()">ล้างตัวกรอง</button>
       </div>
       <div class="panel">
         <table>
-          <thead><tr><th>วันเวลา</th><th>สินค้า</th><th>ประเภท</th><th>จำนวน</th><th>คงเหลือหลังทำรายการ</th><th>ผู้ทำรายการ</th><th>หมายเหตุ</th></tr></thead>
-          <tbody id="history-table-body"><tr><td colspan="7" class="empty-note">กำลังโหลด...</td></tr></tbody>
+          <thead><tr><th>วันเวลา</th><th>สินค้า</th><th>ตู้/หมวดหมู่</th><th>ประเภท</th><th>จำนวน</th><th>คงเหลือหลังทำรายการ</th><th>ผู้ทำรายการ</th><th>หมายเหตุ</th></tr></thead>
+          <tbody id="history-table-body"><tr><td colspan="8" class="empty-note">กำลังโหลด...</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -579,6 +580,8 @@ let PRODUCTS = [];
 let currentTxType = 'รับเข้า';
 let isDashboardLoaded = false;
 let COLLAPSED_GROUPS = new Set();
+// แผนที่ รหัสสินค้า/ชื่อสินค้า -> หมวดหมู่ (ตู้) ใช้แสดงในหน้าประวัติและหน้าแดชบอร์ด
+let CATEGORY_MAP = {};
 try {
   const savedCollapsed = JSON.parse(localStorage.getItem('stock_collapsed_groups') || '[]');
   COLLAPSED_GROUPS = new Set(savedCollapsed);
@@ -586,6 +589,20 @@ try {
 
 function saveCollapsedGroups(){
   try { localStorage.setItem('stock_collapsed_groups', JSON.stringify(Array.from(COLLAPSED_GROUPS))); } catch(e){}
+}
+
+// สร้าง/อัพเดต CATEGORY_MAP จากรายการสินค้า ใช้ทั้ง id และชื่อเป็นคีย์
+// เพื่อให้ค้นหาหมวดหมู่ได้ไม่ว่าประวัติจะมี productId มาด้วยหรือมีแค่ productName
+function updateCategoryMap(list){
+  (list || []).forEach(p => {
+    const cat = p.category || '';
+    if(p.id !== undefined && p.id !== null) CATEGORY_MAP[String(p.id)] = cat;
+    if(p.name) CATEGORY_MAP[String(p.name)] = cat;
+  });
+}
+function categoryFor(t){
+  const cat = CATEGORY_MAP[String(t.productId ?? '')] ?? CATEGORY_MAP[String(t.productName ?? '')];
+  return cat || '';
 }
 
 // ===========================================================================
@@ -695,8 +712,11 @@ function loadDashboard(manual){
   if(manual && btn) btn.classList.add('spinning');
   document.getElementById('today-label').textContent = new Date().toLocaleDateString('th-TH', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
 
-  apiGet('getDashboardData')
-    .then(data => { renderDashboard(data); if(btn) btn.classList.remove('spinning'); })
+  Promise.all([
+    apiGet('getDashboardData'),
+    apiGet('getProducts').then(list => { updateCategoryMap(list); }).catch(() => {})
+  ])
+    .then(([data]) => { renderDashboard(data); if(btn) btn.classList.remove('spinning'); })
     .catch(err => { showError(err); if(btn) btn.classList.remove('spinning'); });
 }
 
@@ -746,10 +766,11 @@ function txRowHtml(t){
   const cls = t.type === 'รับเข้า' ? 'in' : (t.type === 'เบิกออก' ? 'out' : 'adj');
   const ts = t.timestamp instanceof Date ? t.timestamp : new Date(t.timestamp);
   const timeStr = isNaN(ts) ? t.timestamp : ts.toLocaleString('th-TH', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+  const cat = categoryFor(t);
   return `
     <div class="tx-row">
       <span class="tx-tag ${cls}">${t.type}</span>
-      <span class="name">${escapeHtml(t.productName)} · ${t.qty} ${t.type==='ปรับปรุงยอด' ? '(ยอดใหม่)' : ''}</span>
+      <span class="name">${escapeHtml(t.productName)}${cat ? ' · <span class="pid">' + escapeHtml(cat) + '</span>' : ''} · ${t.qty} ${t.type==='ปรับปรุงยอด' ? '(ยอดใหม่)' : ''}</span>
       <span class="time">${timeStr}</span>
     </div>
   `;
@@ -760,7 +781,7 @@ function txRowHtml(t){
 // ===========================================================================
 function loadProducts(){
   apiGet('getProducts')
-    .then(list => { PRODUCTS = list; populateCategoryFilter(); renderProducts(); })
+    .then(list => { PRODUCTS = list; updateCategoryMap(list); populateCategoryFilter(); renderProducts(); })
     .catch(showError);
 }
 
@@ -782,6 +803,15 @@ function populateCategoryFilter(){
   // เติม datalist ในฟอร์มเพิ่ม/แก้ไขสินค้าด้วย เพื่อให้พิมพ์ชื่อตู้ซ้ำได้ง่าย
   const dl = document.getElementById('p-category-datalist');
   if(dl) dl.innerHTML = categories.map(c => `<option value="${escapeHtml(c)}">`).join('');
+
+  // เติม dropdown ตัวกรองตู้/หมวดหมู่ในหน้าประวัติด้วย (ใช้ค่าสินค้าเดียวกัน)
+  const histSel = document.getElementById('hist-category');
+  if(histSel){
+    const prevHist = histSel.value;
+    histSel.innerHTML = '<option value="">ทุกตู้ / หมวดหมู่</option>' +
+      categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    if(categories.includes(prevHist)) histSel.value = prevHist;
+  }
 }
 
 // จัดกลุ่มสินค้าตามตู้/หมวดหมู่ แล้วเรียงชื่อกลุ่มตามตัวอักษรไทย
@@ -994,6 +1024,7 @@ function loadProductsForForm(){
   return apiGet('getProducts')
     .then(list => {
       PRODUCTS = list;
+      updateCategoryMap(list);
       const dl = document.getElementById('tx-product-datalist');
       dl.innerHTML = list.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
     })
@@ -1074,12 +1105,15 @@ function submitTx(e){
 // History
 // ===========================================================================
 function loadHistory(){
-  if(document.getElementById('hist-product').options.length <= 1){
-    apiGet('getProducts').then(list => {
+  const productsPromise = apiGet('getProducts').then(list => {
+    updateCategoryMap(list);
+    populateCategoryFilter();
+    if(document.getElementById('hist-product').options.length <= 1){
       const sel = document.getElementById('hist-product');
       sel.innerHTML = '<option value="">ทุกสินค้า</option>' + list.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
-    }).catch(showError);
-  }
+    }
+    PRODUCTS = list;
+  }).catch(showError);
 
   const filters = {
     type: document.getElementById('hist-type').value,
@@ -1087,9 +1121,13 @@ function loadHistory(){
     dateFrom: document.getElementById('hist-from').value,
     dateTo: document.getElementById('hist-to').value
   };
+  const categoryFilter = document.getElementById('hist-category') ? document.getElementById('hist-category').value : '';
 
-  apiGet('getTransactions', filters)
-    .then(renderHistory)
+  Promise.all([productsPromise, apiGet('getTransactions', filters)])
+    .then(([_, list]) => {
+      const filtered = categoryFilter ? list.filter(t => categoryFor(t) === categoryFilter) : list;
+      renderHistory(filtered);
+    })
     .catch(showError);
 }
 
@@ -1097,15 +1135,17 @@ function renderHistory(list){
   document.getElementById('history-count-label').textContent = `พบ ${list.length} รายการ`;
   const body = document.getElementById('history-table-body');
   if(list.length === 0){
-    body.innerHTML = '<tr><td colspan="7" class="empty-note">ไม่พบรายการ</td></tr>';
+    body.innerHTML = '<tr><td colspan="8" class="empty-note">ไม่พบรายการ</td></tr>';
     return;
   }
   body.innerHTML = list.map(t => {
     const cls = t.type === 'รับเข้า' ? 'in' : (t.type === 'เบิกออก' ? 'out' : 'adj');
+    const cat = categoryFor(t);
     return `
     <tr>
       <td class="mono-label mono" data-label="วันเวลา">${t.timestamp}</td>
       <td class="mono-label" data-label="สินค้า">${escapeHtml(t.productName)}</td>
+      <td class="mono-label" data-label="ตู้/หมวดหมู่">${escapeHtml(cat || '-')}</td>
       <td class="mono-label" data-label="ประเภท"><span class="tx-tag ${cls}">${t.type}</span></td>
       <td class="mono-label mono" data-label="จำนวน">${t.qty}</td>
       <td class="mono-label mono" data-label="คงเหลือ">${t.balanceAfter}</td>
@@ -1118,6 +1158,7 @@ function renderHistory(list){
 function clearHistoryFilters(){
   document.getElementById('hist-type').value = '';
   document.getElementById('hist-product').value = '';
+  if(document.getElementById('hist-category')) document.getElementById('hist-category').value = '';
   document.getElementById('hist-from').value = '';
   document.getElementById('hist-to').value = '';
   loadHistory();
