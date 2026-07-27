@@ -487,6 +487,7 @@
     <div class="modal-body">
       <form id="product-form" onsubmit="saveProduct(event)">
         <input type="hidden" id="p-id">
+        <div class="field" id="p-code-field"><label>รหัสสินค้า</label><input type="text" id="p-code" placeholder="เช่น P0001" autocomplete="off"></div>
         <div class="field"><label>ชื่อสินค้า</label><input type="text" id="p-name" required></div>
         <div class="form-grid">
           <div class="field"><label>หมวดหมู่ / ตู้</label><input type="text" id="p-category" list="p-category-datalist" placeholder="เช่น ตู้ 1, ตู้ 2..."><datalist id="p-category-datalist"></datalist></div>
@@ -907,6 +908,7 @@ function productRowHtml(p){
 function openProductModal(product){
   document.getElementById('product-form').reset();
   const qtyField = document.getElementById('p-qty-field');
+  const codeField = document.getElementById('p-code-field');
   if(product){
     document.getElementById('product-modal-title').textContent = 'แก้ไขสินค้า';
     document.getElementById('p-id').value = product.id;
@@ -916,10 +918,13 @@ function openProductModal(product){
     document.getElementById('p-minqty').value = product.minQty;
     document.getElementById('p-price').value = product.price;
     qtyField.style.display = 'none'; // แก้จำนวนผ่านหน้า รับ/เบิก เท่านั้น
+    codeField.style.display = 'none'; // แก้ไขรหัสสินค้าเดิมไม่ได้
   } else {
     document.getElementById('product-modal-title').textContent = 'เพิ่มสินค้าใหม่';
     document.getElementById('p-id').value = '';
+    document.getElementById('p-code').value = '';
     qtyField.style.display = '';
+    codeField.style.display = '';
   }
   document.getElementById('product-overlay').classList.add('show');
 }
@@ -930,11 +935,30 @@ function closeProductModal(){
 function saveProduct(e){
   e.preventDefault();
   const btn = document.getElementById('product-save-btn');
-  btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
 
   const id = document.getElementById('p-id').value;
+
+  // ถ้าเป็นการเพิ่มสินค้าใหม่ ต้องกรอกรหัสสินค้าเอง และห้ามซ้ำกับที่มีอยู่แล้ว
+  let newCode = '';
+  if(!id){
+    newCode = document.getElementById('p-code').value.trim();
+    if(!newCode){
+      toast('กรุณากรอกรหัสสินค้า', 'error');
+      document.getElementById('p-code').focus();
+      return;
+    }
+    const exists = PRODUCTS.some(p => String(p.id ?? '').toLowerCase() === newCode.toLowerCase());
+    if(exists){
+      toast(`รหัสสินค้า "${newCode}" มีอยู่แล้ว กรุณาใช้รหัสอื่น`, 'error');
+      document.getElementById('p-code').focus();
+      return;
+    }
+  }
+
+  btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+
   const payload = {
-    id: id,
+    id: id ? id : newCode,
     name: document.getElementById('p-name').value.trim(),
     category: document.getElementById('p-category').value.trim(),
     unit: document.getElementById('p-unit').value.trim(),
