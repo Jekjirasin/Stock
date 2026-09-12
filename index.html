@@ -650,6 +650,11 @@ try {
   COLLAPSED_GROUPS = new Set(savedCollapsed);
 } catch (e) {}
 
+// แคชฝั่งหน้าเว็บ: กันไม่ให้ยิง getProducts ซ้ำถี่เกินไปตอนสลับหน้าไปมาเร็วๆ
+// (ยังคงยิงจริงเสมอถ้าเกินอายุแคชนี้ หรือถ้าเพิ่ง add/edit/delete/ทำรายการไป)
+let PRODUCTS_LOADED_AT = 0;
+const PRODUCTS_CACHE_MS = 15000; // 15 วินาที
+
 function saveCollapsedGroups(){
   try { localStorage.setItem('stock_collapsed_groups', JSON.stringify(Array.from(COLLAPSED_GROUPS))); } catch(e){}
 }
@@ -830,7 +835,7 @@ function txRowHtml(t){
 // ===========================================================================
 function loadProducts(){
   apiGet('getProducts')
-    .then(list => { PRODUCTS = list; populateCategoryFilter(); renderProducts(); })
+    .then(list => { PRODUCTS = list; PRODUCTS_LOADED_AT = Date.now(); populateCategoryFilter(); renderProducts(); })
     .catch(showError);
 }
 
@@ -1018,6 +1023,7 @@ function saveProduct(e){
     btn.disabled = false; btn.textContent = 'บันทึก';
     closeProductModal();
     toast(id ? 'แก้ไขสินค้าเรียบร้อย' : 'เพิ่มสินค้าเรียบร้อย', 'success');
+    PRODUCTS_LOADED_AT = 0; // บังคับให้โหลดข้อมูลสินค้าใหม่ในครั้งถัดไป (ข้อมูลเปลี่ยนแล้ว)
     loadProducts();
     if(isDashboardLoaded) loadDashboard();
   };
@@ -1030,17 +1036,32 @@ function saveProduct(e){
 function deleteProductConfirm(id, name){
   if(!confirm(`ยืนยันลบ "${name}" ออกจากระบบ?`)) return;
   apiPost('deleteProduct', { id: id })
-    .then(() => { toast('ลบสินค้าเรียบร้อย', 'success'); loadProducts(); if(isDashboardLoaded) loadDashboard(); })
+    .then(() => {
+      toast('ลบสินค้าเรียบร้อย', 'success');
+      PRODUCTS_LOADED_AT = 0; // บังคับให้โหลดข้อมูลสินค้าใหม่ในครั้งถัดไป (ข้อมูลเปลี่ยนแล้ว)
+      loadProducts();
+      if(isDashboardLoaded) loadDashboard();
+    })
     .catch(showError);
 }
 
 // ===========================================================================
 // Transact (stock in / out / adjust)
 // ===========================================================================
+// โหลดรายการสินค้าไว้ใช้ในฟอร์มรับ/เบิก โดยใช้แคชสั้นๆ ฝั่งหน้าเว็บ (PRODUCTS_CACHE_MS)
+// เพื่อลดจำนวนครั้งที่ยิง getProducts ซ้ำเวลาผู้ใช้สลับไปมาหน้า "สินค้า" กับ "รับ/เบิก" เร็วๆ
+// ถ้ามีการเพิ่ม/แก้/ลบสินค้า หรือทำรายการรับ-เบิกไปแล้ว ระบบจะบังคับให้โหลดใหม่เสมอ (ดู PRODUCTS_LOADED_AT = 0)
 function loadProductsForForm(){
+  const isFresh = PRODUCTS.length > 0 && (Date.now() - PRODUCTS_LOADED_AT) < PRODUCTS_CACHE_MS;
+  if(isFresh){
+    const dl = document.getElementById('tx-product-datalist');
+    dl.innerHTML = PRODUCTS.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+    return Promise.resolve();
+  }
   return apiGet('getProducts')
     .then(list => {
       PRODUCTS = list;
+      PRODUCTS_LOADED_AT = Date.now();
       const dl = document.getElementById('tx-product-datalist');
       dl.innerHTML = list.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
     })
@@ -1111,6 +1132,7 @@ function submitTx(e){
       document.getElementById('tx-product-info').textContent = 'พิมพ์รหัสสินค้าเพื่อดูชื่อสินค้า';
       document.getElementById('tx-product-info').style.color = '';
       document.getElementById('tx-preview').textContent = 'เลือกสินค้าเพื่อดูยอดคงเหลือ';
+      PRODUCTS_LOADED_AT = 0; // บังคับให้โหลดข้อมูลสินค้าใหม่ในครั้งถัดไป (ยอดคงเหลือเปลี่ยนแล้ว)
       loadProductsForForm();
       if(isDashboardLoaded) loadDashboard();
     })
