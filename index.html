@@ -135,7 +135,7 @@
     font-size:13.5px;font-family:inherit;background:var(--surface);
   }
   .search-input:focus{outline:none;border-color:var(--brand);}
-  select, input[type=text], input[type=number], input[type=date], input[type=password], textarea{
+  select, input[type=text], input[type=number], input[type=date], input[type=month], input[type=password], textarea{
     font-family:inherit;font-size:13.5px;padding:9px 11px;border:1px solid var(--line);
     border-radius:8px;background:var(--surface);color:var(--ink);width:100%;
   }
@@ -172,7 +172,7 @@
   }
 
   /* ---------- filters ---------- */
-  .filter-bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+  .filter-bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center;}
   .filter-bar > *{min-width:140px;}
 
   /* ---------- product group headers ---------- */
@@ -188,6 +188,20 @@
     tr.group-header td{padding:11px 6px;}
     .group-title{font-size:13px;}
   }
+
+  /* ---------- report ---------- */
+  .rank-row{display:flex;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid var(--line);}
+  .rank-row:last-child{border-bottom:none;}
+  .rank-num{
+    width:22px;height:22px;border-radius:6px;background:var(--bg);color:var(--muted);
+    display:flex;align-items:center;justify-content:center;font-family:var(--mono);
+    font-size:11px;font-weight:700;flex-shrink:0;
+  }
+  .rank-row .name{flex:1;font-size:13.5px;font-weight:500;}
+  .rank-bar-wrap{flex:1;max-width:160px;}
+  .rank-bar{height:6px;background:var(--line);border-radius:4px;overflow:hidden;}
+  .rank-bar > div{height:100%;background:var(--warn);}
+  .rank-row .rank-qty{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--ink-soft);min-width:70px;text-align:right;}
 
   /* ---------- modal ---------- */
   .overlay{
@@ -338,6 +352,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
       ประวัติ
     </div>
+    <div class="nav-item" data-view="report">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+      รายงานรายเดือน
+    </div>
     <div class="sidebar-foot">สต็อกอัพเดตเมื่อวันที่ 15 กรกฎาคม 2569</div>
   </div>
 
@@ -441,16 +459,60 @@
           <option value="ปรับปรุงยอด">ปรับปรุงยอด</option>
         </select>
         <select id="hist-product" onchange="loadHistory()"><option value="">ทุกสินค้า</option></select>
-        <select id="hist-category" onchange="loadHistory()"><option value="">ทุกตู้ / หมวดหมู่</option></select>
         <input type="date" id="hist-from" onchange="loadHistory()">
         <input type="date" id="hist-to" onchange="loadHistory()">
         <button class="btn secondary" onclick="clearHistoryFilters()">ล้างตัวกรอง</button>
       </div>
       <div class="panel">
         <table>
-          <thead><tr><th>วันเวลา</th><th>สินค้า</th><th>ตู้/หมวดหมู่</th><th>ประเภท</th><th>จำนวน</th><th>คงเหลือหลังทำรายการ</th><th>ผู้ทำรายการ</th><th>หมายเหตุ</th></tr></thead>
-          <tbody id="history-table-body"><tr><td colspan="8" class="empty-note">กำลังโหลด...</td></tr></tbody>
+          <thead><tr><th>วันเวลา</th><th>สินค้า</th><th>ประเภท</th><th>จำนวน</th><th>คงเหลือหลังทำรายการ</th><th>ผู้ทำรายการ</th><th>หมายเหตุ</th></tr></thead>
+          <tbody id="history-table-body"><tr><td colspan="7" class="empty-note">กำลังโหลด...</td></tr></tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- ================= REPORT ================= -->
+    <section class="view" id="view-report">
+      <div class="topbar">
+        <div><h1>รายงานรายเดือน</h1><div class="sub" id="report-range-label"></div></div>
+        <button class="btn secondary" onclick="exportReportCSV()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>ดาวน์โหลด CSV</button>
+      </div>
+      <div class="filter-bar">
+        <input type="month" id="report-month" onchange="loadReport()">
+        <button class="btn secondary" type="button" onclick="shiftReportMonth(-1)">‹ เดือนก่อน</button>
+        <button class="btn secondary" type="button" onclick="shiftReportMonth(1)">เดือนถัดไป ›</button>
+      </div>
+
+      <div class="stat-grid" id="report-stat-grid">
+        <div class="stat-card"><div class="label">รายการทั้งหมดในเดือนนี้</div><div class="value" id="rep-total-tx">–</div></div>
+        <div class="stat-card"><div class="label">รับเข้ารวม (หน่วย)</div><div class="value" id="rep-total-in">–</div></div>
+        <div class="stat-card alert"><div class="label">เบิกออกรวม (หน่วย)</div><div class="value" id="rep-total-out">–</div></div>
+        <div class="stat-card brand-accent"><div class="label">มูลค่าเบิกออก (บาท)</div><div class="value" id="rep-total-out-value">–</div></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>สินค้าที่เบิกออกมากที่สุด (Top 5)</h2></div>
+        <div class="panel-body" id="report-top-list"><div class="empty-note">เลือกเดือนเพื่อดูรายงาน</div></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>สรุปเคลื่อนไหวรายสินค้า</h2></div>
+        <div class="panel-body" style="padding:0;">
+          <table>
+            <thead><tr><th>รหัส</th><th>ชื่อสินค้า</th><th>หมวดหมู่</th><th>รับเข้า</th><th>เบิกออก</th><th>ปรับปรุง</th><th>คงเหลือสิ้นเดือน</th></tr></thead>
+            <tbody id="report-table-body"><tr><td colspan="7" class="empty-note">เลือกเดือนเพื่อดูรายงาน</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h2>🧊 สินค้าที่ไม่ถูกเบิกเลยในเดือนนี้</h2><span class="sub" id="report-notmoved-count" style="color:var(--muted);font-size:12.5px;"></span></div>
+        <div class="panel-body" style="padding:0;">
+          <table>
+            <thead><tr><th>รหัส</th><th>ชื่อสินค้า</th><th>หมวดหมู่</th><th>คงเหลือปัจจุบัน</th><th>สถานะเดือนนี้</th></tr></thead>
+            <tbody id="report-notmoved-body"><tr><td colspan="5" class="empty-note">เลือกเดือนเพื่อดูรายงาน</td></tr></tbody>
+          </table>
+        </div>
       </div>
     </section>
   </main>
@@ -479,6 +541,10 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
     <span>ประวัติ</span>
   </div>
+  <div class="bn-item" data-view="report">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+    <span>รายงาน</span>
+  </div>
 </div>
 
 <!-- Product modal -->
@@ -488,7 +554,6 @@
     <div class="modal-body">
       <form id="product-form" onsubmit="saveProduct(event)">
         <input type="hidden" id="p-id">
-        <div class="field" id="p-code-field"><label>รหัสสินค้า</label><input type="text" id="p-code" placeholder="เช่น P0001" autocomplete="off"></div>
         <div class="field"><label>ชื่อสินค้า</label><input type="text" id="p-name" required></div>
         <div class="form-grid">
           <div class="field"><label>หมวดหมู่ / ตู้</label><input type="text" id="p-category" list="p-category-datalist" placeholder="เช่น ตู้ 1, ตู้ 2..."><datalist id="p-category-datalist"></datalist></div>
@@ -580,8 +645,6 @@ let PRODUCTS = [];
 let currentTxType = 'รับเข้า';
 let isDashboardLoaded = false;
 let COLLAPSED_GROUPS = new Set();
-// แผนที่ รหัสสินค้า/ชื่อสินค้า -> หมวดหมู่ (ตู้) ใช้แสดงในหน้าประวัติและหน้าแดชบอร์ด
-let CATEGORY_MAP = {};
 try {
   const savedCollapsed = JSON.parse(localStorage.getItem('stock_collapsed_groups') || '[]');
   COLLAPSED_GROUPS = new Set(savedCollapsed);
@@ -589,20 +652,6 @@ try {
 
 function saveCollapsedGroups(){
   try { localStorage.setItem('stock_collapsed_groups', JSON.stringify(Array.from(COLLAPSED_GROUPS))); } catch(e){}
-}
-
-// สร้าง/อัพเดต CATEGORY_MAP จากรายการสินค้า ใช้ทั้ง id และชื่อเป็นคีย์
-// เพื่อให้ค้นหาหมวดหมู่ได้ไม่ว่าประวัติจะมี productId มาด้วยหรือมีแค่ productName
-function updateCategoryMap(list){
-  (list || []).forEach(p => {
-    const cat = p.category || '';
-    if(p.id !== undefined && p.id !== null) CATEGORY_MAP[String(p.id)] = cat;
-    if(p.name) CATEGORY_MAP[String(p.name)] = cat;
-  });
-}
-function categoryFor(t){
-  const cat = CATEGORY_MAP[String(t.productId ?? '')] ?? CATEGORY_MAP[String(t.productName ?? '')];
-  return cat || '';
 }
 
 // ===========================================================================
@@ -679,6 +728,10 @@ function switchView(viewName, opts){
     });
   }
   if(viewName === 'history') loadHistory();
+  if(viewName === 'report'){
+    if(!document.getElementById('report-month').value) initReportMonth();
+    loadReport();
+  }
 }
 document.querySelectorAll('[data-view]').forEach(el => {
   el.addEventListener('click', () => switchView(el.dataset.view));
@@ -712,11 +765,8 @@ function loadDashboard(manual){
   if(manual && btn) btn.classList.add('spinning');
   document.getElementById('today-label').textContent = new Date().toLocaleDateString('th-TH', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
 
-  Promise.all([
-    apiGet('getDashboardData'),
-    apiGet('getProducts').then(list => { updateCategoryMap(list); }).catch(() => {})
-  ])
-    .then(([data]) => { renderDashboard(data); if(btn) btn.classList.remove('spinning'); })
+  apiGet('getDashboardData')
+    .then(data => { renderDashboard(data); if(btn) btn.classList.remove('spinning'); })
     .catch(err => { showError(err); if(btn) btn.classList.remove('spinning'); });
 }
 
@@ -766,11 +816,10 @@ function txRowHtml(t){
   const cls = t.type === 'รับเข้า' ? 'in' : (t.type === 'เบิกออก' ? 'out' : 'adj');
   const ts = t.timestamp instanceof Date ? t.timestamp : new Date(t.timestamp);
   const timeStr = isNaN(ts) ? t.timestamp : ts.toLocaleString('th-TH', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
-  const cat = categoryFor(t);
   return `
     <div class="tx-row">
       <span class="tx-tag ${cls}">${t.type}</span>
-      <span class="name">${escapeHtml(t.productName)}${cat ? ' · <span class="pid">' + escapeHtml(cat) + '</span>' : ''} · ${t.qty} ${t.type==='ปรับปรุงยอด' ? '(ยอดใหม่)' : ''}</span>
+      <span class="name">${escapeHtml(t.productName)} · ${t.qty} ${t.type==='ปรับปรุงยอด' ? '(ยอดใหม่)' : ''}</span>
       <span class="time">${timeStr}</span>
     </div>
   `;
@@ -781,7 +830,7 @@ function txRowHtml(t){
 // ===========================================================================
 function loadProducts(){
   apiGet('getProducts')
-    .then(list => { PRODUCTS = list; updateCategoryMap(list); populateCategoryFilter(); renderProducts(); })
+    .then(list => { PRODUCTS = list; populateCategoryFilter(); renderProducts(); })
     .catch(showError);
 }
 
@@ -803,15 +852,6 @@ function populateCategoryFilter(){
   // เติม datalist ในฟอร์มเพิ่ม/แก้ไขสินค้าด้วย เพื่อให้พิมพ์ชื่อตู้ซ้ำได้ง่าย
   const dl = document.getElementById('p-category-datalist');
   if(dl) dl.innerHTML = categories.map(c => `<option value="${escapeHtml(c)}">`).join('');
-
-  // เติม dropdown ตัวกรองตู้/หมวดหมู่ในหน้าประวัติด้วย (ใช้ค่าสินค้าเดียวกัน)
-  const histSel = document.getElementById('hist-category');
-  if(histSel){
-    const prevHist = histSel.value;
-    histSel.innerHTML = '<option value="">ทุกตู้ / หมวดหมู่</option>' +
-      categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
-    if(categories.includes(prevHist)) histSel.value = prevHist;
-  }
 }
 
 // จัดกลุ่มสินค้าตามตู้/หมวดหมู่ แล้วเรียงชื่อกลุ่มตามตัวอักษรไทย
@@ -938,7 +978,6 @@ function productRowHtml(p){
 function openProductModal(product){
   document.getElementById('product-form').reset();
   const qtyField = document.getElementById('p-qty-field');
-  const codeField = document.getElementById('p-code-field');
   if(product){
     document.getElementById('product-modal-title').textContent = 'แก้ไขสินค้า';
     document.getElementById('p-id').value = product.id;
@@ -948,13 +987,10 @@ function openProductModal(product){
     document.getElementById('p-minqty').value = product.minQty;
     document.getElementById('p-price').value = product.price;
     qtyField.style.display = 'none'; // แก้จำนวนผ่านหน้า รับ/เบิก เท่านั้น
-    codeField.style.display = 'none'; // แก้ไขรหัสสินค้าเดิมไม่ได้
   } else {
     document.getElementById('product-modal-title').textContent = 'เพิ่มสินค้าใหม่';
     document.getElementById('p-id').value = '';
-    document.getElementById('p-code').value = '';
     qtyField.style.display = '';
-    codeField.style.display = '';
   }
   document.getElementById('product-overlay').classList.add('show');
 }
@@ -965,30 +1001,11 @@ function closeProductModal(){
 function saveProduct(e){
   e.preventDefault();
   const btn = document.getElementById('product-save-btn');
-
-  const id = document.getElementById('p-id').value;
-
-  // ถ้าเป็นการเพิ่มสินค้าใหม่ ต้องกรอกรหัสสินค้าเอง และห้ามซ้ำกับที่มีอยู่แล้ว
-  let newCode = '';
-  if(!id){
-    newCode = document.getElementById('p-code').value.trim();
-    if(!newCode){
-      toast('กรุณากรอกรหัสสินค้า', 'error');
-      document.getElementById('p-code').focus();
-      return;
-    }
-    const exists = PRODUCTS.some(p => String(p.id ?? '').toLowerCase() === newCode.toLowerCase());
-    if(exists){
-      toast(`รหัสสินค้า "${newCode}" มีอยู่แล้ว กรุณาใช้รหัสอื่น`, 'error');
-      document.getElementById('p-code').focus();
-      return;
-    }
-  }
-
   btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
 
+  const id = document.getElementById('p-id').value;
   const payload = {
-    id: id ? id : newCode,
+    id: id,
     name: document.getElementById('p-name').value.trim(),
     category: document.getElementById('p-category').value.trim(),
     unit: document.getElementById('p-unit').value.trim(),
@@ -1024,7 +1041,6 @@ function loadProductsForForm(){
   return apiGet('getProducts')
     .then(list => {
       PRODUCTS = list;
-      updateCategoryMap(list);
       const dl = document.getElementById('tx-product-datalist');
       dl.innerHTML = list.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
     })
@@ -1105,15 +1121,12 @@ function submitTx(e){
 // History
 // ===========================================================================
 function loadHistory(){
-  const productsPromise = apiGet('getProducts').then(list => {
-    updateCategoryMap(list);
-    populateCategoryFilter();
-    if(document.getElementById('hist-product').options.length <= 1){
+  if(document.getElementById('hist-product').options.length <= 1){
+    apiGet('getProducts').then(list => {
       const sel = document.getElementById('hist-product');
       sel.innerHTML = '<option value="">ทุกสินค้า</option>' + list.map(p => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
-    }
-    PRODUCTS = list;
-  }).catch(showError);
+    }).catch(showError);
+  }
 
   const filters = {
     type: document.getElementById('hist-type').value,
@@ -1121,13 +1134,9 @@ function loadHistory(){
     dateFrom: document.getElementById('hist-from').value,
     dateTo: document.getElementById('hist-to').value
   };
-  const categoryFilter = document.getElementById('hist-category') ? document.getElementById('hist-category').value : '';
 
-  Promise.all([productsPromise, apiGet('getTransactions', filters)])
-    .then(([_, list]) => {
-      const filtered = categoryFilter ? list.filter(t => categoryFor(t) === categoryFilter) : list;
-      renderHistory(filtered);
-    })
+  apiGet('getTransactions', filters)
+    .then(renderHistory)
     .catch(showError);
 }
 
@@ -1135,17 +1144,15 @@ function renderHistory(list){
   document.getElementById('history-count-label').textContent = `พบ ${list.length} รายการ`;
   const body = document.getElementById('history-table-body');
   if(list.length === 0){
-    body.innerHTML = '<tr><td colspan="8" class="empty-note">ไม่พบรายการ</td></tr>';
+    body.innerHTML = '<tr><td colspan="7" class="empty-note">ไม่พบรายการ</td></tr>';
     return;
   }
   body.innerHTML = list.map(t => {
     const cls = t.type === 'รับเข้า' ? 'in' : (t.type === 'เบิกออก' ? 'out' : 'adj');
-    const cat = categoryFor(t);
     return `
     <tr>
       <td class="mono-label mono" data-label="วันเวลา">${t.timestamp}</td>
       <td class="mono-label" data-label="สินค้า">${escapeHtml(t.productName)}</td>
-      <td class="mono-label" data-label="ตู้/หมวดหมู่">${escapeHtml(cat || '-')}</td>
       <td class="mono-label" data-label="ประเภท"><span class="tx-tag ${cls}">${t.type}</span></td>
       <td class="mono-label mono" data-label="จำนวน">${t.qty}</td>
       <td class="mono-label mono" data-label="คงเหลือ">${t.balanceAfter}</td>
@@ -1158,10 +1165,291 @@ function renderHistory(list){
 function clearHistoryFilters(){
   document.getElementById('hist-type').value = '';
   document.getElementById('hist-product').value = '';
-  if(document.getElementById('hist-category')) document.getElementById('hist-category').value = '';
   document.getElementById('hist-from').value = '';
   document.getElementById('hist-to').value = '';
   loadHistory();
+}
+
+// ===========================================================================
+// Monthly report
+// ===========================================================================
+let LAST_REPORT = null; // { monthLabel, monthValue, rows: [...], totals: {...}, top: [...] }
+
+function initReportMonth(){
+  const now = new Date();
+  const val = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  document.getElementById('report-month').value = val;
+}
+
+function shiftReportMonth(delta){
+  const input = document.getElementById('report-month');
+  if(!input.value) initReportMonth();
+  const [y, m] = input.value.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  input.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  loadReport();
+}
+
+function monthRange(monthValue){
+  const [y, m] = monthValue.split('-').map(Number);
+  const from = `${y}-${String(m).padStart(2,'0')}-01`;
+  const lastDay = new Date(y, m, 0).getDate();
+  const to = `${y}-${String(m).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+  return { from, to };
+}
+
+function loadReport(){
+  const monthInput = document.getElementById('report-month');
+  if(!monthInput.value) initReportMonth();
+  const monthValue = monthInput.value;
+  const { from, to } = monthRange(monthValue);
+
+  const monthDate = new Date(Number(monthValue.split('-')[0]), Number(monthValue.split('-')[1]) - 1, 1);
+  document.getElementById('report-range-label').textContent =
+    'ประจำเดือน ' + monthDate.toLocaleDateString('th-TH', { month: 'long', year: 'numeric' }) + ` (${from} ถึง ${to})`;
+
+  setReportLoading();
+
+  Promise.all([
+    apiGet('getProducts'),
+    apiGet('getTransactions', { dateFrom: from, dateTo: to })
+  ])
+    .then(([products, transactions]) => {
+      PRODUCTS = products;
+      LAST_REPORT = buildReportData(monthValue, products, transactions);
+      renderReport(LAST_REPORT);
+    })
+    .catch(err => { showError(err); setReportEmpty(); });
+}
+
+function setReportLoading(){
+  document.getElementById('rep-total-tx').textContent = '…';
+  document.getElementById('rep-total-in').textContent = '…';
+  document.getElementById('rep-total-out').textContent = '…';
+  document.getElementById('rep-total-out-value').textContent = '…';
+  document.getElementById('report-top-list').innerHTML = '<div class="empty-note">กำลังโหลด...</div>';
+  document.getElementById('report-table-body').innerHTML = '<tr><td colspan="7" class="empty-note">กำลังโหลด...</td></tr>';
+  document.getElementById('report-notmoved-body').innerHTML = '<tr><td colspan="5" class="empty-note">กำลังโหลด...</td></tr>';
+  document.getElementById('report-notmoved-count').textContent = '';
+}
+
+function setReportEmpty(){
+  document.getElementById('rep-total-tx').textContent = '–';
+  document.getElementById('rep-total-in').textContent = '–';
+  document.getElementById('rep-total-out').textContent = '–';
+  document.getElementById('rep-total-out-value').textContent = '–';
+  document.getElementById('report-top-list').innerHTML = '<div class="empty-note">ไม่สามารถโหลดรายงานได้</div>';
+  document.getElementById('report-table-body').innerHTML = '<tr><td colspan="7" class="empty-note">ไม่สามารถโหลดรายงานได้</td></tr>';
+  document.getElementById('report-notmoved-body').innerHTML = '<tr><td colspan="5" class="empty-note">ไม่สามารถโหลดรายงานได้</td></tr>';
+  document.getElementById('report-notmoved-count').textContent = '';
+}
+
+// รวมรายการทั้งเดือนตามสินค้า: รับเข้า/เบิกออก/ปรับปรุง และยอดคงเหลือล่าสุดในเดือนนั้น
+function buildReportData(monthValue, products, transactions){
+  const productMap = {};
+  products.forEach(p => { productMap[String(p.id)] = p; });
+
+  const byProduct = {}; // id -> { in, out, adj, lastBalance, lastTime, outValue }
+  let totalIn = 0, totalOut = 0, totalOutValue = 0;
+
+  // เรียงตามเวลาเพื่อให้ "คงเหลือสิ้นเดือน" อ้างอิงรายการล่าสุดในเดือนนั้นจริงๆ
+  const sorted = transactions.slice().sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+  sorted.forEach(t => {
+    const pid = String(t.productId ?? t.id ?? '');
+    const key = pid || t.productName;
+    if(!byProduct[key]) byProduct[key] = { productId: pid, productName: t.productName, in: 0, out: 0, adj: 0, lastBalance: null };
+    const qty = Number(t.qty) || 0;
+    const product = productMap[pid];
+    const price = product ? Number(product.price || 0) : 0;
+
+    if(t.type === 'รับเข้า'){
+      byProduct[key].in += qty;
+      totalIn += qty;
+    } else if(t.type === 'เบิกออก'){
+      byProduct[key].out += qty;
+      totalOut += qty;
+      totalOutValue += qty * price;
+    } else {
+      byProduct[key].adj += 1;
+    }
+    byProduct[key].lastBalance = t.balanceAfter;
+  });
+
+  const rows = Object.values(byProduct).map(r => {
+    const product = productMap[r.productId];
+    return {
+      id: r.productId || '-',
+      name: r.productName || (product ? product.name : '-'),
+      category: product ? (product.category || '') : '',
+      unit: product ? (product.unit || '') : '',
+      in: r.in,
+      out: r.out,
+      adj: r.adj,
+      endBalance: r.lastBalance !== null && r.lastBalance !== undefined ? r.lastBalance : '-'
+    };
+  }).sort((a, b) => (b.out + b.in) - (a.out + a.in));
+
+  const top = rows.filter(r => r.out > 0).sort((a, b) => b.out - a.out).slice(0, 5);
+
+  // สินค้าที่ "ไม่ถูกเบิกออก" เลยในเดือนนี้ — ดูจากสินค้าทั้งหมด (ไม่ใช่แค่ที่มีรายการ)
+  // เทียบ id เป็น string เผื่อ backend ส่งรหัสเป็นตัวเลข
+  const notWithdrawn = products
+    .map(p => {
+      const key = String(p.id);
+      const entry = byProduct[key];
+      const hasAnyMovement = !!entry;
+      const outQty = entry ? entry.out : 0;
+      if(outQty > 0) return null; // ถูกเบิกแล้ว ไม่ต้องเอามาแสดง
+      let status = 'ไม่มีความเคลื่อนไหวเลยในเดือนนี้';
+      if(hasAnyMovement && (entry.in > 0 || entry.adj > 0)){
+        status = 'มีรับเข้า/ปรับปรุงยอด แต่ไม่มีการเบิก';
+      }
+      return {
+        id: p.id,
+        name: p.name,
+        category: p.category || '',
+        unit: p.unit || '',
+        qty: p.qty,
+        price: p.price,
+        status
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => String(a.name).localeCompare(String(b.name), 'th'));
+
+  return {
+    monthValue,
+    rows,
+    top,
+    notWithdrawn,
+    totals: { totalTx: transactions.length, totalIn, totalOut, totalOutValue }
+  };
+}
+
+function renderReport(report){
+  document.getElementById('rep-total-tx').textContent = report.totals.totalTx.toLocaleString('th-TH');
+  document.getElementById('rep-total-in').textContent = report.totals.totalIn.toLocaleString('th-TH');
+  document.getElementById('rep-total-out').textContent = report.totals.totalOut.toLocaleString('th-TH');
+  document.getElementById('rep-total-out-value').textContent = Math.round(report.totals.totalOutValue).toLocaleString('th-TH');
+
+  const topList = document.getElementById('report-top-list');
+  if(report.top.length === 0){
+    topList.innerHTML = '<div class="empty-note">ไม่มีการเบิกออกในเดือนนี้</div>';
+  } else {
+    const maxOut = Math.max(...report.top.map(r => r.out));
+    topList.innerHTML = report.top.map((r, i) => `
+      <div class="rank-row">
+        <div class="rank-num">${i + 1}</div>
+        <div class="name">${escapeHtml(r.name)} <span class="pid">${escapeHtml(String(r.id))}</span></div>
+        <div class="rank-bar-wrap"><div class="rank-bar"><div style="width:${Math.round((r.out / (maxOut || 1)) * 100)}%"></div></div></div>
+        <div class="rank-qty">${r.out.toLocaleString('th-TH')} ${escapeHtml(r.unit||'')}</div>
+      </div>
+    `).join('');
+  }
+
+  const body = document.getElementById('report-table-body');
+  renderReportGroupedTable(body, report.rows, REPORT_COLLAPSED_MOVED, 7, reportRowHtml,
+    'ไม่มีการเคลื่อนไหวในเดือนนี้', 'moved');
+
+  const nmBody = document.getElementById('report-notmoved-body');
+  const nmCount = document.getElementById('report-notmoved-count');
+  nmCount.textContent = `${report.notWithdrawn.length} รายการ`;
+  renderReportGroupedTable(nmBody, report.notWithdrawn, REPORT_COLLAPSED_NOTMOVED, 5, notWithdrawnRowHtml,
+    'ทุกรายการถูกเบิกออกอย่างน้อย 1 ครั้งในเดือนนี้ ✓', 'notmoved');
+}
+
+// สินค้าที่ถูกจัดกลุ่มตามหมวดหมู่/ตู้ ใช้ตัวช่วยเดิม (groupProductsByCategory) เพราะ rows/notWithdrawn มีฟิลด์ category อยู่แล้ว
+let REPORT_COLLAPSED_MOVED = new Set();
+let REPORT_COLLAPSED_NOTMOVED = new Set();
+
+function renderReportGroupedTable(tbodyEl, items, collapsedSet, colspan, rowRenderFn, emptyMsg, groupKind){
+  if(items.length === 0){
+    tbodyEl.innerHTML = `<tr><td colspan="${colspan}" class="empty-note">${emptyMsg}</td></tr>`;
+    return;
+  }
+  const { groups, names } = groupProductsByCategory(items);
+  tbodyEl.innerHTML = names.map(cat => {
+    const groupItems = groups[cat];
+    const collapsed = collapsedSet.has(cat);
+    const header = `
+      <tr class="group-header${collapsed ? ' collapsed' : ''}" data-report-toggle="${escapeHtml(cat)}">
+        <td colspan="${colspan}">
+          <div class="group-title">
+            <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M9 6l6 6-6 6"/></svg>
+            <span>${escapeHtml(cat)}</span>
+            <span class="group-count">${groupItems.length} รายการ</span>
+          </div>
+        </td>
+      </tr>`;
+    const rows = collapsed ? '' : groupItems.map(rowRenderFn).join('');
+    return header + rows;
+  }).join('');
+
+  tbodyEl.querySelectorAll('[data-report-toggle]').forEach(el => {
+    el.addEventListener('click', () => {
+      const cat = el.getAttribute('data-report-toggle');
+      if(collapsedSet.has(cat)) collapsedSet.delete(cat);
+      else collapsedSet.add(cat);
+      renderReport(LAST_REPORT);
+    });
+  });
+}
+
+function reportRowHtml(r){
+  return `
+    <tr>
+      <td class="mono-label pid" data-label="รหัส">${escapeHtml(String(r.id))}</td>
+      <td class="mono-label" data-label="ชื่อสินค้า"><strong>${escapeHtml(r.name)}</strong></td>
+      <td class="mono-label" data-label="หมวดหมู่">${escapeHtml(r.category || '-')}</td>
+      <td class="mono-label mono" data-label="รับเข้า">${r.in ? '+' + r.in : '-'}</td>
+      <td class="mono-label mono" data-label="เบิกออก">${r.out ? '-' + r.out : '-'}</td>
+      <td class="mono-label mono" data-label="ปรับปรุง">${r.adj ? r.adj + ' ครั้ง' : '-'}</td>
+      <td class="mono-label mono" data-label="คงเหลือสิ้นเดือน">${r.endBalance} ${escapeHtml(r.unit||'')}</td>
+    </tr>`;
+}
+
+function notWithdrawnRowHtml(r){
+  return `
+    <tr>
+      <td class="mono-label pid" data-label="รหัส">${escapeHtml(String(r.id))}</td>
+      <td class="mono-label" data-label="ชื่อสินค้า"><strong>${escapeHtml(r.name)}</strong></td>
+      <td class="mono-label" data-label="หมวดหมู่">${escapeHtml(r.category || '-')}</td>
+      <td class="mono-label mono" data-label="คงเหลือปัจจุบัน">${r.qty} ${escapeHtml(r.unit||'')}</td>
+      <td class="mono-label" data-label="สถานะเดือนนี้">${escapeHtml(r.status)}</td>
+    </tr>`;
+}
+
+function exportReportCSV(){
+  if(!LAST_REPORT || LAST_REPORT.rows.length === 0){
+    toast('ยังไม่มีข้อมูลรายงานให้ดาวน์โหลด', 'error');
+    return;
+  }
+  const header = ['รหัส','ชื่อสินค้า','หมวดหมู่','รับเข้า','เบิกออก','ปรับปรุง(ครั้ง)','คงเหลือสิ้นเดือน'];
+  const lines = [header.join(',')];
+  LAST_REPORT.rows.forEach(r => {
+    lines.push([r.id, `"${String(r.name).replace(/"/g,'""')}"`, `"${String(r.category || '-').replace(/"/g,'""')}"`, r.in, r.out, r.adj, r.endBalance].join(','));
+  });
+  lines.push('');
+  lines.push(`รวม,,รวมรับเข้า,${LAST_REPORT.totals.totalIn},รวมเบิกออก,${LAST_REPORT.totals.totalOut},มูลค่าเบิกออก(บาท),${Math.round(LAST_REPORT.totals.totalOutValue)}`);
+
+  lines.push('');
+  lines.push('สินค้าที่ไม่ถูกเบิกเลยในเดือนนี้');
+  lines.push(['รหัส','ชื่อสินค้า','หมวดหมู่','คงเหลือปัจจุบัน','สถานะเดือนนี้'].join(','));
+  (LAST_REPORT.notWithdrawn || []).forEach(r => {
+    lines.push([r.id, `"${String(r.name).replace(/"/g,'""')}"`, `"${String(r.category || '-').replace(/"/g,'""')}"`, r.qty, `"${r.status}"`].join(','));
+  });
+
+  const csvContent = '\uFEFF' + lines.join('\r\n'); // BOM เพื่อให้ Excel อ่านภาษาไทยถูกต้อง
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `รายงานสต็อก-${LAST_REPORT.monthValue}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ===========================================================================
