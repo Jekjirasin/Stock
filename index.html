@@ -1450,7 +1450,7 @@ function exportReportCSV(){
   const header = ['รหัส','ชื่อสินค้า','หมวดหมู่','รับเข้า','เบิกออก','ปรับปรุง(ครั้ง)','คงเหลือสิ้นเดือน'];
   const lines = [header.join(',')];
   LAST_REPORT.rows.forEach(r => {
-    lines.push([r.id, `"${String(r.name).replace(/"/g,'""')}"`, `"${String(r.category || '-').replace(/"/g,'""')}"`, r.in, r.out, r.adj, r.endBalance].join(','));
+    lines.push([csvSafeText(r.id), `"${String(r.name).replace(/"/g,'""')}"`, `"${String(r.category||'-').replace(/"/g,'""')}"`, r.in, r.out, r.adj, r.endBalance].join(','));
   });
   lines.push('');
   lines.push(`รวม,,รวมรับเข้า,${LAST_REPORT.totals.totalIn},รวมเบิกออก,${LAST_REPORT.totals.totalOut},มูลค่าเบิกออก(บาท),${Math.round(LAST_REPORT.totals.totalOutValue)}`);
