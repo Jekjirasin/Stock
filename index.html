@@ -653,7 +653,7 @@ try {
 // แคชฝั่งหน้าเว็บ: กันไม่ให้ยิง getProducts ซ้ำถี่เกินไปตอนสลับหน้าไปมาเร็วๆ
 // (ยังคงยิงจริงเสมอถ้าเกินอายุแคชนี้ หรือถ้าเพิ่ง add/edit/delete/ทำรายการไป)
 let PRODUCTS_LOADED_AT = 0;
-const PRODUCTS_CACHE_MS = 15000; // 15 วินาที
+const PRODUCTS_CACHE_MS = 60000; // 1 นาที
 
 function saveCollapsedGroups(){
   try { localStorage.setItem('stock_collapsed_groups', JSON.stringify(Array.from(COLLAPSED_GROUPS))); } catch(e){}
