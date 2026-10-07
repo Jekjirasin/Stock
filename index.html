@@ -1442,6 +1442,13 @@ function notWithdrawnRowHtml(r){
     </tr>`;
 }
 
+// แปลงค่าให้ปลอดภัยสำหรับ CSV: ครอบด้วย " และป้องกันสูตร Excel (= + - @) ที่อยู่หน้าสุด
+function csvSafeText(value){
+  let s = String(value === null || value === undefined ? '' : value);
+  if(/^[=+\-@]/.test(s)) s = "'" + s;
+  return '"' + s.replace(/"/g, '""') + '"';
+}
+
 function exportReportCSV(){
   if(!LAST_REPORT || LAST_REPORT.rows.length === 0){
     toast('ยังไม่มีข้อมูลรายงานให้ดาวน์โหลด', 'error');
@@ -1459,7 +1466,7 @@ function exportReportCSV(){
   lines.push('สินค้าที่ไม่ถูกเบิกเลยในเดือนนี้');
   lines.push(['รหัส','ชื่อสินค้า','หมวดหมู่','คงเหลือปัจจุบัน','สถานะเดือนนี้'].join(','));
   (LAST_REPORT.notWithdrawn || []).forEach(r => {
-    lines.push([r.id, `"${String(r.name).replace(/"/g,'""')}"`, `"${String(r.category || '-').replace(/"/g,'""')}"`, r.qty, `"${r.status}"`].join(','));
+    lines.push([csvSafeText(r.id), `"${String(r.name).replace(/"/g,'""')}"`, `"${String(r.category || '-').replace(/"/g,'""')}"`, r.qty, `"${r.status}"`].join(','));
   });
 
   const csvContent = '\uFEFF' + lines.join('\r\n'); // BOM เพื่อให้ Excel อ่านภาษาไทยถูกต้อง
