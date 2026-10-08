@@ -592,51 +592,16 @@
 
 <div class="toast-wrap" id="toast-wrap"></div>
 
-<!-- ตั้งค่า URL ของ Apps Script Web app ที่นี่ -->
+<!-- Supabase client + ตั้งค่า (แก้ค่าใน config.js) + ชั้น API ที่คุยกับ Supabase -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
+<script src="supabase-api.js"></script>
 <script>
 // ===========================================================================
 // ตั้งค่ารหัสผ่านสำหรับยืนยันก่อนแก้ไข/ลบสินค้า
 // เปลี่ยนรหัสผ่านได้ตรงนี้ (หรือกำหนด ADMIN_PASSWORD ไว้ใน config.js ก็ได้)
 // ===========================================================================
 const ADMIN_PASSWORD = (typeof CONFIG_ADMIN_PASSWORD !== 'undefined') ? CONFIG_ADMIN_PASSWORD : '1234';
-
-// ===========================================================================
-// API layer — เรียก Google Apps Script Web App ผ่าน fetch()
-// ===========================================================================
-/**
- * GET ใช้กับ action ที่อ่านข้อมูลอย่างเดียว
- * (ไม่ตั้ง header เอง เพื่อเลี่ยง CORS preflight ที่ Apps Script ไม่รองรับ)
- */
-async function apiGet(action, params) {
-  params = params || {};
-  const url = new URL(API_URL);
-  url.searchParams.set('action', action);
-  Object.keys(params).forEach(k => {
-    if (params[k] !== undefined && params[k] !== null && params[k] !== '') url.searchParams.set(k, params[k]);
-  });
-  const res = await fetch(url.toString());
-  const json = await res.json();
-  if (!json.success) throw new Error(json.error || 'เกิดข้อผิดพลาด');
-  return json.data;
-}
-
-/**
- * POST ใช้กับ action ที่แก้ไขข้อมูล
- * ตั้ง Content-Type เป็น text/plain โดยตั้งใจ (ไม่ใช่ application/json)
- * เพื่อให้เบราว์เซอร์ส่งเป็น "simple request" ไม่ต้องทำ CORS preflight (OPTIONS)
- * ซึ่ง Apps Script Web App ไม่รองรับ
- */
-async function apiPost(action, data) {
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(Object.assign({ action: action }, data || {}))
-  });
-  const json = await res.json();
-  if (!json.success) throw new Error(json.error || 'เกิดข้อผิดพลาด');
-  return json.data;
-}
 
 // ===========================================================================
 // State
@@ -1173,7 +1138,7 @@ function renderHistory(list){
     const cls = t.type === 'รับเข้า' ? 'in' : (t.type === 'เบิกออก' ? 'out' : 'adj');
     return `
     <tr>
-      <td class="mono-label mono" data-label="วันเวลา">${t.timestamp}</td>
+      <td class="mono-label mono" data-label="วันเวลา">${fmtDateTime(t.timestamp)}</td>
       <td class="mono-label" data-label="สินค้า">${escapeHtml(t.productName)}</td>
       <td class="mono-label" data-label="ประเภท"><span class="tx-tag ${cls}">${t.type}</span></td>
       <td class="mono-label mono" data-label="จำนวน">${t.qty}</td>
@@ -1484,6 +1449,12 @@ function exportReportCSV(){
 // ===========================================================================
 // Utils
 // ===========================================================================
+function fmtDateTime(v){
+  const d = new Date(v);
+  if(isNaN(d)) return v || '';
+  return d.toLocaleString('th-TH', { timeZone:'Asia/Bangkok', day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
 function escapeHtml(str){
   if(str === null || str === undefined) return '';
   return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
